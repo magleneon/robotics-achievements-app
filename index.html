@@ -22,12 +22,12 @@
 
   <!-- Экран входа -->
   <section id="loginScreen" class="screen">
-    <p class="screen-text">Введи своё имя, чтобы начать копить достижения на кружке робототехники</p>
+    <p class="screen-text">Войди по логину и паролю, которые тебе выдал педагог</p>
 
     <details class="info-block">
       <summary>ℹ️ Как это работает?</summary>
       <ol>
-        <li>Введи своё имя — приложение запомнит именно твой прогресс.</li>
+        <li>Логин и пароль тебе выдаёт педагог — они запомнят именно твой прогресс.</li>
         <li>На каждом занятии отмечай выполненные достижения галочкой.</li>
         <li>За каждое достижение начисляется XP, а за полностью закрытую категорию — именной значок.</li>
         <li>Собери все 12 достижений — получишь звание «Легенда кружка» и именной сертификат.</li>
@@ -37,25 +37,47 @@
     <form id="loginForm" autocomplete="off">
       <input
         type="text"
-        id="nameInput"
-        placeholder="Как тебя зовут?"
-        list="namesList"
+        id="usernameInput"
+        placeholder="Логин"
+        autocomplete="username"
         maxlength="30"
         required
       >
-      <datalist id="namesList"></datalist>
-      <button type="submit" class="btn btn-primary">Начать</button>
+      <input
+        type="password"
+        id="passwordInput"
+        placeholder="Пароль"
+        autocomplete="current-password"
+        required
+      >
+      <button type="submit" class="btn btn-primary">Войти</button>
     </form>
+    <p id="loginError" class="login-error" hidden>Неверный логин или пароль</p>
 
     <div id="leaderboard" class="leaderboard">
       <div class="leaderboard-title">🏆 Рейтинг кружка</div>
       <ul id="leaderboardList" class="leaderboard-list"></ul>
-      <p id="leaderboardEmpty" class="leaderboard-empty" hidden>Рейтинг пока пуст — введи имя и стань первым в списке!</p>
+      <p id="leaderboardEmpty" class="leaderboard-empty" hidden>Рейтинг пока пуст!</p>
     </div>
 
     <div class="login-footer">
       <button id="teacherPanelBtn" type="button" class="btn btn-ghost btn-small no-print">👩‍🏫 Панель педагога</button>
     </div>
+  </section>
+
+  <!-- Вход для педагога -->
+  <section id="teacherLoginScreen" class="screen" hidden>
+    <div class="teacher-header">
+      <h2>🔐 Вход для педагога</h2>
+      <button id="closeTeacherLoginBtn" type="button" class="btn btn-ghost no-print">✕ Закрыть</button>
+    </div>
+    <p class="screen-text">Введи логин и пароль педагога, чтобы открыть панель управления.</p>
+    <form id="teacherLoginForm" autocomplete="off">
+      <input type="text" id="teacherUsernameInput" placeholder="Логин" autocomplete="username" required>
+      <input type="password" id="teacherPasswordInput" placeholder="Пароль" autocomplete="current-password" required>
+      <button type="submit" class="btn btn-primary">Войти</button>
+    </form>
+    <p id="teacherLoginError" class="login-error" hidden>Неверный логин или пароль</p>
   </section>
 
   <!-- Основной экран -->
@@ -155,6 +177,17 @@
     </div>
 
     <div id="teacherStats" class="teacher-stats"></div>
+
+    <div class="add-student-card no-print">
+      <div class="section-title">➕ Добавить ученика</div>
+      <form id="addStudentForm" class="add-student-form" autocomplete="off">
+        <input type="text" id="newStudentUsername" placeholder="Логин ученика" maxlength="30" required>
+        <input type="text" id="newStudentPassword" placeholder="Пароль" maxlength="30" required>
+        <button type="button" id="generatePasswordBtn" class="btn btn-ghost" title="Сгенерировать пароль">🎲</button>
+        <button type="submit" class="btn btn-primary">Создать</button>
+      </form>
+      <p id="addStudentMessage" class="login-error" hidden></p>
+    </div>
 
     <div class="teacher-table-wrap">
       <table class="teacher-table">

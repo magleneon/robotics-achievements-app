@@ -262,8 +262,20 @@ const LEVELS = [
 const loginScreen = document.getElementById("loginScreen");
 const mainScreen = document.getElementById("mainScreen");
 const loginForm = document.getElementById("loginForm");
-const nameInput = document.getElementById("nameInput");
-const namesList = document.getElementById("namesList");
+const usernameInput = document.getElementById("usernameInput");
+const passwordInput = document.getElementById("passwordInput");
+const loginError = document.getElementById("loginError");
+const teacherLoginScreen = document.getElementById("teacherLoginScreen");
+const teacherLoginForm = document.getElementById("teacherLoginForm");
+const teacherUsernameInput = document.getElementById("teacherUsernameInput");
+const teacherPasswordInput = document.getElementById("teacherPasswordInput");
+const teacherLoginError = document.getElementById("teacherLoginError");
+const closeTeacherLoginBtn = document.getElementById("closeTeacherLoginBtn");
+const addStudentForm = document.getElementById("addStudentForm");
+const newStudentUsername = document.getElementById("newStudentUsername");
+const newStudentPassword = document.getElementById("newStudentPassword");
+const generatePasswordBtn = document.getElementById("generatePasswordBtn");
+const addStudentMessage = document.getElementById("addStudentMessage");
 const userNameEl = document.getElementById("userName");
 const switchUserBtn = document.getElementById("switchUserBtn");
 const resetBtn = document.getElementById("resetBtn");
@@ -333,16 +345,21 @@ function studentRef(name) {
   return doc(db, "students", normalizeName(name));
 }
 
-// Загружает документ ученика; создаёт новый, если его ещё нет
-async function loadOrCreateStudent(name) {
-  const ref = studentRef(name);
-  const snap = await getDoc(ref);
-  if (snap.exists()) {
-    return snap.data();
-  }
-  const fresh = { name, checked: [], quizzes: {}, note: "", lastActive: null, easterEgg: false };
-  await setDoc(ref, fresh);
-  return fresh;
+// Хэширует пароль (SHA-256) — на сервере хранится не открытый текст, а хэш
+async function sha256Hex(text) {
+  const bytes = new TextEncoder().encode(text);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function verifyTeacherAuth(username, password) {
+  const snap = await getDoc(doc(db, "config", "teacherAuth"));
+  if (!snap.exists()) return false;
+  const data = snap.data();
+  const hash = await sha256Hex(password);
+  return data.username === username && data.passwordHash === hash;
 }
 
 // Сохраняет изменения в фоне (не блокирует интерфейс); при сбое показывает тост
@@ -352,18 +369,6 @@ function saveStudentData(name, partial) {
     console.error("Firestore save error:", err);
     showToast(NETWORK_ERROR_TOAST);
   });
-}
-
-// Ищет уже существующего ученика без учёта регистра/лишних пробелов,
-// чтобы «Соня» и «соня» не превращались в двух разных учеников.
-async function findExistingName(rawName) {
-  const snap = await getDoc(studentRef(rawName));
-  return snap.exists() ? (snap.data().name || rawName) : null;
-}
-
-async function getKnownNames() {
-  const snap = await getDocs(studentsCol);
-  return snap.docs.map((d) => d.data().name || d.id);
 }
 
 function getUserChecked() {
@@ -447,22 +452,6 @@ function getBadgeStatus(checkedSet) {
   return result;
 }
 
-async function fillNamesList() {
-  let names = [];
-  try {
-    names = await getKnownNames();
-  } catch (e) {
-    console.error(e);
-    return;
-  }
-  namesList.innerHTML = "";
-  names.forEach((name) => {
-    const opt = document.createElement("option");
-    opt.value = name;
-    namesList.appendChild(opt);
-  });
-}
-
 async function getLeaderboardData() {
   const snap = await getDocs(studentsCol);
   return snap.docs
@@ -499,7 +488,7 @@ async function renderLeaderboard() {
   }
 
   if (top.length === 0) {
-    leaderboardEmpty.textContent = "Рейтинг пока пуст — введи имя и стань первым в списке!";
+    leaderboardEmpty.textContent = "Рейтинг пока пуст!";
     leaderboardEmpty.hidden = false;
     return;
   }
@@ -515,7 +504,6 @@ async function renderLeaderboard() {
       <span class="rank-level" title="${level.title}">${level.icon}</span>
       <span class="rank-xp">⭐ ${u.xp} XP</span>
     `;
-    li.addEventListener("click", () => showMainScreen(u.name));
     leaderboardList.appendChild(li);
   });
 }
@@ -910,18 +898,13 @@ function openCertificate() {
   certificate.hidden = false;
 }
 
-async function showMainScreen(name) {
-  try {
-    currentUserData = await loadOrCreateStudent(name);
-  } catch (e) {
-    console.error(e);
-    showToast(NETWORK_ERROR_TOAST);
-    return;
-  }
-  currentUser = currentUserData.name || name;
+function enterMainScreen(name, data) {
+  currentUserData = data;
+  currentUser = data.name || name;
   userNameEl.textContent = currentUser;
   loginScreen.hidden = true;
   teacherScreen.hidden = true;
+  teacherLoginScreen.hidden = true;
   mainScreen.hidden = false;
   renderAchievements();
   renderQuizzes();
@@ -932,26 +915,41 @@ function showLoginScreen() {
   currentUserData = null;
   mainScreen.hidden = true;
   teacherScreen.hidden = true;
+  teacherLoginScreen.hidden = true;
   loginScreen.hidden = false;
-  nameInput.value = "";
-  nameInput.focus();
-  fillNamesList();
+  usernameInput.value = "";
+  passwordInput.value = "";
+  loginError.hidden = true;
+  usernameInput.focus();
   renderLeaderboard();
 }
 
 loginForm.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const raw = nameInput.value.trim().replace(/\s+/g, " ");
-  if (!raw) return;
+  const username = usernameInput.value.trim();
+  const password = passwordInput.value;
+  if (!username || !password) return;
 
+  loginError.hidden = true;
   const submitBtn = loginForm.querySelector('button[type="submit"]');
   const originalLabel = submitBtn.textContent;
   submitBtn.disabled = true;
-  submitBtn.textContent = "Загрузка…";
+  submitBtn.textContent = "Вход…";
 
   try {
-    const existing = await findExistingName(raw);
-    await showMainScreen(existing || raw);
+    const snap = await getDoc(studentRef(username));
+    if (!snap.exists()) {
+      loginError.hidden = false;
+      return;
+    }
+    const data = snap.data();
+    const hash = await sha256Hex(password);
+    if (data.passwordHash !== hash) {
+      loginError.hidden = false;
+      return;
+    }
+    passwordInput.value = "";
+    enterMainScreen(username, data);
   } catch (err) {
     console.error(err);
     showToast(NETWORK_ERROR_TOAST);
@@ -1062,16 +1060,26 @@ async function renderTeacherPanel() {
     noteTd.appendChild(noteTextarea);
     tr.appendChild(noteTd);
 
-    const deleteTd = document.createElement("td");
-    deleteTd.className = "no-print";
+    const actionsTd = document.createElement("td");
+    actionsTd.className = "no-print";
+
+    const resetPwdBtn = document.createElement("button");
+    resetPwdBtn.type = "button";
+    resetPwdBtn.className = "teacher-reset";
+    resetPwdBtn.setAttribute("aria-label", "Сбросить пароль");
+    resetPwdBtn.textContent = "🔑";
+    resetPwdBtn.addEventListener("click", () => resetStudentPassword(u.name));
+    actionsTd.appendChild(resetPwdBtn);
+
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
     deleteBtn.className = "teacher-delete";
     deleteBtn.setAttribute("aria-label", "Удалить ученика");
     deleteBtn.textContent = "🗑";
     deleteBtn.addEventListener("click", () => deleteStudent(u.name));
-    deleteTd.appendChild(deleteBtn);
-    tr.appendChild(deleteTd);
+    actionsTd.appendChild(deleteBtn);
+
+    tr.appendChild(actionsTd);
 
     teacherTableBody.appendChild(tr);
   });
@@ -1090,10 +1098,116 @@ async function deleteStudent(name) {
   renderTeacherPanel();
 }
 
+async function resetStudentPassword(name) {
+  const newPassword = prompt(`Новый пароль для «${name}»:`);
+  if (!newPassword || !newPassword.trim()) return;
+  try {
+    const passwordHash = await sha256Hex(newPassword.trim());
+    await setDoc(studentRef(name), { passwordHash }, { merge: true });
+    alert(`Готово. Новый пароль для «${name}»: ${newPassword.trim()}`);
+  } catch (e) {
+    console.error(e);
+    showToast(NETWORK_ERROR_TOAST);
+  }
+}
+
+addStudentForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const username = newStudentUsername.value.trim();
+  const password = newStudentPassword.value.trim();
+  addStudentMessage.hidden = true;
+  if (!username || !password) return;
+
+  try {
+    const ref = studentRef(username);
+    const existing = await getDoc(ref);
+    if (existing.exists()) {
+      addStudentMessage.className = "login-error";
+      addStudentMessage.textContent = "Такой логин уже существует.";
+      addStudentMessage.hidden = false;
+      return;
+    }
+
+    const passwordHash = await sha256Hex(password);
+    await setDoc(ref, {
+      name: username,
+      passwordHash,
+      checked: [],
+      quizzes: {},
+      note: "",
+      lastActive: null,
+      easterEgg: false,
+    });
+
+    addStudentMessage.className = "add-student-success";
+    addStudentMessage.textContent = `Готово! Логин: ${username} · Пароль: ${password}`;
+    addStudentMessage.hidden = false;
+    newStudentUsername.value = "";
+    newStudentPassword.value = "";
+    renderTeacherPanel();
+  } catch (err) {
+    console.error(err);
+    addStudentMessage.className = "login-error";
+    addStudentMessage.textContent = "Не удалось создать — проверь интернет-соединение.";
+    addStudentMessage.hidden = false;
+  }
+});
+
+generatePasswordBtn.addEventListener("click", () => {
+  const words = ["робот", "шестерня", "мотор", "сенсор", "паяльник", "болт", "провод", "шасси"];
+  const word = words[Math.floor(Math.random() * words.length)];
+  const num = Math.floor(100 + Math.random() * 900);
+  newStudentPassword.value = word + num;
+});
+
 teacherPanelBtn.addEventListener("click", () => {
   loginScreen.hidden = true;
-  teacherScreen.hidden = false;
-  renderTeacherPanel();
+  if (sessionStorage.getItem("teacherAuthed") === "1") {
+    teacherScreen.hidden = false;
+    renderTeacherPanel();
+  } else {
+    teacherUsernameInput.value = "";
+    teacherPasswordInput.value = "";
+    teacherLoginError.hidden = true;
+    teacherLoginScreen.hidden = false;
+  }
+});
+
+teacherLoginForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const username = teacherUsernameInput.value.trim();
+  const password = teacherPasswordInput.value;
+  if (!username || !password) return;
+
+  teacherLoginError.hidden = true;
+  const submitBtn = teacherLoginForm.querySelector('button[type="submit"]');
+  const originalLabel = submitBtn.textContent;
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Вход…";
+
+  try {
+    const ok = await verifyTeacherAuth(username, password);
+    if (!ok) {
+      teacherLoginError.hidden = false;
+      return;
+    }
+    sessionStorage.setItem("teacherAuthed", "1");
+    teacherPasswordInput.value = "";
+    teacherLoginScreen.hidden = true;
+    teacherScreen.hidden = false;
+    renderTeacherPanel();
+  } catch (err) {
+    console.error(err);
+    showToast(NETWORK_ERROR_TOAST);
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = originalLabel;
+  }
+});
+
+closeTeacherLoginBtn.addEventListener("click", () => {
+  teacherLoginScreen.hidden = true;
+  loginScreen.hidden = false;
 });
 
 closeTeacherBtn.addEventListener("click", () => {
@@ -1106,5 +1220,4 @@ printTeacherBtn.addEventListener("click", () => {
 });
 
 // Старт приложения
-fillNamesList();
 renderLeaderboard();
