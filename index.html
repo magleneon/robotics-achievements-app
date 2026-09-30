@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Копилка достижений юного робототехника — веб-приложение для отслеживания прогресса учеников кружка робототехники.">
+<title>Копилка достижений юного робототехника</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A4%96%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app">
+
+  <header class="app-header">
+    <div class="logo">🤖</div>
+    <div>
+      <h1>Копилка достижений</h1>
+      <p class="subtitle">юного робототехника</p>
+    </div>
+  </header>
+
+  <!-- Экран входа -->
+  <section id="loginScreen" class="screen">
+    <p class="screen-text">Введи своё имя, чтобы начать копить достижения на кружке робототехники</p>
+
+    <details class="info-block">
+      <summary>ℹ️ Как это работает?</summary>
+      <ol>
+        <li>Введи своё имя — приложение запомнит именно твой прогресс.</li>
+        <li>На каждом занятии отмечай выполненные достижения галочкой.</li>
+        <li>За каждое достижение начисляется XP, а за полностью закрытую категорию — именной значок.</li>
+        <li>Собери все 12 достижений — получишь звание «Легенда кружка» и именной сертификат.</li>
+      </ol>
+    </details>
+
+    <form id="loginForm" autocomplete="off">
+      <input
+        type="text"
+        id="nameInput"
+        placeholder="Как тебя зовут?"
+        list="namesList"
+        maxlength="30"
+        required
+      >
+      <datalist id="namesList"></datalist>
+      <button type="submit" class="btn btn-primary">Начать</button>
+    </form>
+
+    <div id="leaderboard" class="leaderboard">
+      <div class="leaderboard-title">🏆 Рейтинг кружка</div>
+      <ul id="leaderboardList" class="leaderboard-list"></ul>
+      <p id="leaderboardEmpty" class="leaderboard-empty" hidden>Рейтинг пока пуст — введи имя и стань первым в списке!</p>
+    </div>
+
+    <div class="login-footer">
+      <button id="teacherPanelBtn" type="button" class="btn btn-ghost btn-small no-print">👩‍🏫 Панель педагога</button>
+    </div>
+  </section>
+
+  <!-- Основной экран -->
+  <section id="mainScreen" class="screen" hidden>
+
+    <div class="user-bar">
+      <span>Привет, <b id="userName"></b>! 👋</span>
+      <button id="switchUserBtn" class="btn btn-ghost">Сменить ученика</button>
+    </div>
+
+    <div class="companion-card">
+      <svg id="companionSvg" class="companion-svg" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <radialGradient id="auraGrad" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#f3c65f" stop-opacity="0.55"/>
+            <stop offset="100%" stop-color="#f3c65f" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+
+        <!-- контур полностью собранного робота, виден всегда -->
+        <g class="companion-ghost" fill="none" stroke="#2c3856" stroke-width="2">
+          <rect x="55" y="118" width="12" height="26" rx="4"/>
+          <rect x="93" y="118" width="12" height="26" rx="4"/>
+          <rect x="45" y="70" width="70" height="52" rx="14"/>
+          <rect x="24" y="78" width="14" height="42" rx="6"/>
+          <rect x="122" y="78" width="14" height="42" rx="6"/>
+          <rect x="50" y="28" width="60" height="46" rx="16"/>
+          <line x1="80" y1="28" x2="80" y2="12"/>
+          <circle cx="80" cy="9" r="5"/>
+          <circle cx="65" cy="50" r="6"/>
+          <circle cx="95" cy="50" r="6"/>
+        </g>
+
+        <circle id="cpAura" class="companion-part" data-min-stage="4" cx="80" cy="85" r="72" fill="url(#auraGrad)"/>
+
+        <g id="cpLegs" class="companion-part" data-min-stage="0" fill="var(--accent-2)">
+          <rect x="55" y="118" width="12" height="26" rx="4"/>
+          <rect x="93" y="118" width="12" height="26" rx="4"/>
+        </g>
+
+        <rect id="cpBody" class="companion-part" data-min-stage="1" x="45" y="70" width="70" height="52" rx="14" fill="var(--accent)"/>
+
+        <g id="cpArms" class="companion-part" data-min-stage="2" fill="var(--accent-2)">
+          <rect x="24" y="78" width="14" height="42" rx="6"/>
+          <rect x="122" y="78" width="14" height="42" rx="6"/>
+        </g>
+
+        <rect id="cpHead" class="companion-part" data-min-stage="2" x="50" y="28" width="60" height="46" rx="16" fill="#2b3350"/>
+
+        <g id="cpEyes" class="companion-part companion-glow" data-min-stage="2" fill="#7be8ff">
+          <circle cx="65" cy="50" r="6"/>
+          <circle cx="95" cy="50" r="6"/>
+        </g>
+
+        <g id="cpAntenna" class="companion-part" data-min-stage="3" stroke="#f3c65f" stroke-width="3" fill="#f3c65f">
+          <line x1="80" y1="28" x2="80" y2="12"/>
+          <circle cx="80" cy="9" r="5" stroke="none"/>
+        </g>
+
+        <path id="cpCrown" class="companion-part" data-min-stage="4" d="M62 26 L68 12 L80 22 L92 12 L98 26 Z" fill="#f3c65f" stroke="#c9a648" stroke-width="1.5"/>
+      </svg>
+      <div id="companionCaption" class="companion-caption">Пока только детали на столе — начни отмечать достижения!</div>
+    </div>
+
+    <div class="progress-card">
+      <div class="level-row">
+        <span id="levelIcon" class="level-icon">🌱</span>
+        <span id="levelTitle" class="level-title">Новичок</span>
+      </div>
+      <div class="progress-bar">
+        <div id="progressFill" class="progress-fill"></div>
+      </div>
+      <div id="progressText" class="progress-text">0 из 0 достижений</div>
+    </div>
+
+    <div id="badgesRow" class="badges-row"></div>
+
+    <ul id="achievementsList" class="achievements-list"></ul>
+
+    <div class="quizzes-section">
+      <div class="section-title">🧪 Проверь себя — мини-тесты</div>
+      <div id="quizzesRow" class="quizzes-row"></div>
+    </div>
+
+    <div class="actions">
+      <button id="certificateBtn" type="button" class="btn btn-ghost" hidden>🎓 Сертификат</button>
+      <button id="resetBtn" type="button" class="btn btn-ghost btn-danger">Сбросить прогресс</button>
+    </div>
+
+  </section>
+
+  <!-- Панель педагога -->
+  <section id="teacherScreen" class="screen" hidden>
+    <div class="teacher-header">
+      <h2>👩‍🏫 Панель педагога</h2>
+      <button id="closeTeacherBtn" type="button" class="btn btn-ghost no-print">✕ Закрыть</button>
+    </div>
+
+    <div id="teacherStats" class="teacher-stats"></div>
+
+    <div class="teacher-table-wrap">
+      <table class="teacher-table">
+        <thead>
+          <tr>
+            <th>Ученик</th>
+            <th>Уровень</th>
+            <th>Прогресс</th>
+            <th>XP</th>
+            <th>Значки</th>
+            <th>Тесты</th>
+            <th>Была активность</th>
+            <th class="no-print">Заметка</th>
+            <th class="no-print"></th>
+          </tr>
+        </thead>
+        <tbody id="teacherTableBody"></tbody>
+      </table>
+    </div>
+
+    <button id="printTeacherBtn" type="button" class="btn btn-ghost no-print">🖨 Печать отчёта</button>
+  </section>
+
+  <!-- Оверлей поздравления -->
+  <div id="celebration" class="celebration" hidden>
+    <div id="confettiLayer" class="confetti-layer"></div>
+    <div class="celebration-card">
+      <div class="celebration-emoji">🏆</div>
+      <h2>Поздравляем!</h2>
+      <p>Ты собрал(а) все достижения и стал(а) <b>Легендой кружка</b>!</p>
+      <div class="celebration-actions">
+        <button id="openCertificateBtn" type="button" class="btn btn-primary">🎓 Получить сертификат</button>
+        <button id="closeCelebration" type="button" class="btn btn-ghost">Продолжить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Сертификат -->
+  <div id="certificate" class="certificate-overlay" hidden>
+    <div class="certificate-card">
+      <button id="closeCertificate" type="button" class="btn certificate-close no-print" aria-label="Закрыть">✕</button>
+      <div class="certificate-emblem">🤖🏆</div>
+      <div class="certificate-kicker">Сертификат достижения</div>
+      <h2 class="certificate-name" id="certName">Имя ученика</h2>
+      <p class="certificate-text">успешно освоил(а) курс робототехники и достиг(ла) уровня</p>
+      <div class="certificate-level" id="certLevel">Мастер</div>
+      <div class="certificate-stats">
+        <div>✅ <span id="certCount">0</span> из <span id="certTotal">12</span> достижений</div>
+        <div>⭐ <span id="certXp">0</span> XP</div>
+        <div>🧪 <span id="certQuizCount">0</span> из 3 тестов</div>
+      </div>
+      <div id="certBadges" class="certificate-badges"></div>
+      <div id="certQuizzes" class="certificate-badges"></div>
+      <div id="certEgg" class="certificate-egg" hidden>🥚 Найден секретный режим робота</div>
+      <div class="certificate-footer">
+        <span id="certDate">01.01.2026</span>
+        <span class="certificate-signature">Кружок робототехники</span>
+      </div>
+      <button id="printCertificateBtn" type="button" class="btn btn-primary no-print">🖨 Печать / сохранить PDF</button>
+    </div>
+  </div>
+
+  <!-- Мини-тест -->
+  <div id="quizModal" class="quiz-overlay" hidden>
+    <div class="quiz-modal-card">
+      <button id="closeQuiz" type="button" class="btn quiz-close" aria-label="Закрыть">✕</button>
+      <div id="quizIcon" class="quiz-icon">🧪</div>
+      <h2 id="quizTitle" class="quiz-title">Название теста</h2>
+      <p id="quizDesc" class="quiz-desc">Описание теста</p>
+      <form id="quizForm" class="quiz-form"></form>
+      <div id="quizResult" class="quiz-result" hidden></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
