@@ -1,7 +1,29 @@
 // Копилка достижений юного робототехника
-// Данные хранятся в localStorage браузера, отдельно для каждого имени ученика.
+// Данные хранятся в общей базе Firestore — прогресс виден с любого устройства.
 
-const STORAGE_KEY = "robospider_achievements_v1";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  setDoc,
+  deleteDoc,
+  collection,
+  getDocs,
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyC6lAa8_cYb1ROAIEMbFc_p5z9UCrYePlc",
+  authDomain: "robotics-achievements-app.firebaseapp.com",
+  projectId: "robotics-achievements-app",
+  storageBucket: "robotics-achievements-app.firebasestorage.app",
+  messagingSenderId: "146729686097",
+  appId: "1:146729686097:web:b66e1afd159d3fe6101470",
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp);
+const studentsCol = collection(db, "students");
 
 const ACHIEVEMENTS = [
   {
@@ -298,108 +320,107 @@ const COMPANION_CAPTIONS = [
   "Робот полностью собран — перед тобой Легенда кружка!",
 ];
 
+const NETWORK_ERROR_TOAST = "⚠️ Не удалось связаться с базой данных — проверь интернет-соединение.";
+
 let currentUser = null;
-
-function loadData() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : { users: {} };
-  } catch (e) {
-    return { users: {} };
-  }
-}
-
-function saveData(data) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch (e) {
-    // localStorage недоступен (приватный режим и т.п.) — прогресс не сохранится между визитами
-  }
-}
-
-function getUserChecked(name) {
-  const data = loadData();
-  return (data.users[name] && data.users[name].checked) || [];
-}
-
-function setUserChecked(name, checked) {
-  const data = loadData();
-  if (!data.users[name]) data.users[name] = {};
-  data.users[name].checked = checked;
-  saveData(data);
-}
-
-function getUserQuizzes(name) {
-  const data = loadData();
-  return (data.users[name] && data.users[name].quizzes) || {};
-}
-
-function setUserQuizResult(name, quizId, score, total, passed) {
-  const data = loadData();
-  if (!data.users[name]) data.users[name] = { checked: [] };
-  if (!data.users[name].quizzes) data.users[name].quizzes = {};
-  const prev = data.users[name].quizzes[quizId] || { bestScore: 0, passed: false };
-  const wasPassed = prev.passed;
-  data.users[name].quizzes[quizId] = {
-    bestScore: Math.max(prev.bestScore, score),
-    total,
-    passed: wasPassed || passed,
-  };
-  saveData(data);
-  return { wasPassed, nowPassed: wasPassed || passed };
-}
-
-function getQuizBonusXp(name) {
-  const quizzes = getUserQuizzes(name);
-  return QUIZZES.filter((q) => quizzes[q.id] && quizzes[q.id].passed).reduce((sum, q) => sum + q.bonusXp, 0);
-}
-
-function getQuizPassedCount(name) {
-  const quizzes = getUserQuizzes(name);
-  return QUIZZES.filter((q) => quizzes[q.id] && quizzes[q.id].passed).length;
-}
-
-function getKnownNames() {
-  const data = loadData();
-  return Object.keys(data.users);
-}
+let currentUserData = null; // кэш документа текущего ученика из Firestore
 
 function normalizeName(name) {
   return name.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+function studentRef(name) {
+  return doc(db, "students", normalizeName(name));
+}
+
+// Загружает документ ученика; создаёт новый, если его ещё нет
+async function loadOrCreateStudent(name) {
+  const ref = studentRef(name);
+  const snap = await getDoc(ref);
+  if (snap.exists()) {
+    return snap.data();
+  }
+  const fresh = { name, checked: [], quizzes: {}, note: "", lastActive: null, easterEgg: false };
+  await setDoc(ref, fresh);
+  return fresh;
+}
+
+// Сохраняет изменения в фоне (не блокирует интерфейс); при сбое показывает тост
+function saveStudentData(name, partial) {
+  if (!name) return;
+  setDoc(studentRef(name), partial, { merge: true }).catch((err) => {
+    console.error("Firestore save error:", err);
+    showToast(NETWORK_ERROR_TOAST);
+  });
+}
+
 // Ищет уже существующего ученика без учёта регистра/лишних пробелов,
 // чтобы «Соня» и «соня» не превращались в двух разных учеников.
-function findExistingName(rawName) {
-  const target = normalizeName(rawName);
-  return getKnownNames().find((known) => normalizeName(known) === target);
+async function findExistingName(rawName) {
+  const snap = await getDoc(studentRef(rawName));
+  return snap.exists() ? (snap.data().name || rawName) : null;
 }
 
-function ensureUserRegistered(name) {
-  const data = loadData();
-  if (!data.users[name]) {
-    data.users[name] = { checked: [] };
-    saveData(data);
-  }
+async function getKnownNames() {
+  const snap = await getDocs(studentsCol);
+  return snap.docs.map((d) => d.data().name || d.id);
 }
 
-function touchLastActive(name) {
-  const data = loadData();
-  if (!data.users[name]) data.users[name] = { checked: [] };
-  data.users[name].lastActive = Date.now();
-  saveData(data);
+function getUserChecked() {
+  return (currentUserData && currentUserData.checked) || [];
 }
 
-function getUserNote(name) {
-  const data = loadData();
-  return (data.users[name] && data.users[name].note) || "";
+function setUserChecked(checked) {
+  currentUserData.checked = checked;
+  saveStudentData(currentUser, { checked });
+}
+
+function getUserQuizzes() {
+  return (currentUserData && currentUserData.quizzes) || {};
+}
+
+function setUserQuizResult(quizId, score, total, passed) {
+  const quizzes = { ...getUserQuizzes() };
+  const prev = quizzes[quizId] || { bestScore: 0, passed: false };
+  const wasPassed = prev.passed;
+  quizzes[quizId] = {
+    bestScore: Math.max(prev.bestScore, score),
+    total,
+    passed: wasPassed || passed,
+  };
+  currentUserData.quizzes = quizzes;
+  saveStudentData(currentUser, { quizzes });
+  return { wasPassed, nowPassed: wasPassed || passed };
+}
+
+function computeQuizBonusXp(quizzes) {
+  return QUIZZES.filter((q) => quizzes[q.id] && quizzes[q.id].passed).reduce((sum, q) => sum + q.bonusXp, 0);
+}
+
+function computeQuizPassedCount(quizzes) {
+  return QUIZZES.filter((q) => quizzes[q.id] && quizzes[q.id].passed).length;
+}
+
+function getQuizBonusXp() {
+  return computeQuizBonusXp(getUserQuizzes());
+}
+
+function getQuizPassedCount() {
+  return computeQuizPassedCount(getUserQuizzes());
+}
+
+function hasEasterEgg() {
+  return Boolean(currentUserData && currentUserData.easterEgg);
+}
+
+function touchLastActive() {
+  const ts = Date.now();
+  if (currentUserData) currentUserData.lastActive = ts;
+  saveStudentData(currentUser, { lastActive: ts });
 }
 
 function setUserNote(name, note) {
-  const data = loadData();
-  if (!data.users[name]) data.users[name] = { checked: [] };
-  data.users[name].note = note;
-  saveData(data);
+  saveStudentData(name, { note });
 }
 
 function formatRelativeDate(ts) {
@@ -426,35 +447,59 @@ function getBadgeStatus(checkedSet) {
   return result;
 }
 
-function fillNamesList() {
+async function fillNamesList() {
+  let names = [];
+  try {
+    names = await getKnownNames();
+  } catch (e) {
+    console.error(e);
+    return;
+  }
   namesList.innerHTML = "";
-  getKnownNames().forEach((name) => {
+  names.forEach((name) => {
     const opt = document.createElement("option");
     opt.value = name;
     namesList.appendChild(opt);
   });
 }
 
-function getLeaderboardData() {
-  const data = loadData();
-  return Object.keys(data.users)
-    .map((name) => {
-      const checked = (data.users[name] && data.users[name].checked) || [];
+async function getLeaderboardData() {
+  const snap = await getDocs(studentsCol);
+  return snap.docs
+    .map((d) => {
+      const data = d.data();
+      const checked = data.checked || [];
       const achievementXp = ACHIEVEMENTS
         .filter((a) => checked.includes(a.id))
         .reduce((sum, a) => sum + a.xp, 0);
       const percent = Math.round((checked.length / ACHIEVEMENTS.length) * 100);
-      return { name, count: checked.length, xp: achievementXp + getQuizBonusXp(name), percent };
+      return {
+        name: data.name || d.id,
+        count: checked.length,
+        xp: achievementXp + computeQuizBonusXp(data.quizzes || {}),
+        percent,
+      };
     })
     .filter((u) => u.count > 0)
     .sort((a, b) => b.xp - a.xp || a.name.localeCompare(b.name, "ru"));
 }
 
-function renderLeaderboard() {
-  const top = getLeaderboardData().slice(0, 5);
+async function renderLeaderboard() {
   leaderboardList.innerHTML = "";
+  leaderboardEmpty.hidden = false;
+  leaderboardEmpty.textContent = "Загрузка рейтинга…";
+
+  let top = [];
+  try {
+    top = (await getLeaderboardData()).slice(0, 5);
+  } catch (e) {
+    console.error(e);
+    leaderboardEmpty.textContent = "Не удалось загрузить рейтинг — проверь интернет-соединение.";
+    return;
+  }
 
   if (top.length === 0) {
+    leaderboardEmpty.textContent = "Рейтинг пока пуст — введи имя и стань первым в списке!";
     leaderboardEmpty.hidden = false;
     return;
   }
@@ -484,7 +529,7 @@ function getLevel(percent) {
 }
 
 function renderAchievements() {
-  const checked = new Set(getUserChecked(currentUser));
+  const checked = new Set(getUserChecked());
   achievementsListEl.innerHTML = "";
 
   ACHIEVEMENTS.forEach((a) => {
@@ -541,7 +586,7 @@ function renderBadges(checkedSet) {
 }
 
 function renderQuizzes() {
-  const quizzes = getUserQuizzes(currentUser);
+  const quizzes = getUserQuizzes();
   quizzesRow.innerHTML = "";
 
   QUIZZES.forEach((quiz) => {
@@ -628,8 +673,8 @@ quizForm.addEventListener("submit", (e) => {
 
   const total = quiz.questions.length;
   const passed = score / total >= 0.75;
-  const { wasPassed } = setUserQuizResult(currentUser, quiz.id, score, total, passed);
-  touchLastActive(currentUser);
+  const { wasPassed } = setUserQuizResult(quiz.id, score, total, passed);
+  touchLastActive();
 
   quizForm.hidden = true;
   quizResult.hidden = false;
@@ -703,13 +748,8 @@ function renderCompanion(percent) {
   companionSvg.classList.toggle("stage-final", stage === LEVELS.length - 1);
 
   let caption = COMPANION_CAPTIONS[stage] || COMPANION_CAPTIONS[0];
-  if (hasEasterEgg(currentUser)) caption += " 🥚";
+  if (hasEasterEgg()) caption += " 🥚";
   companionCaption.textContent = caption;
-}
-
-function hasEasterEgg(name) {
-  const data = loadData();
-  return Boolean(data.users[name] && data.users[name].easterEgg);
 }
 
 // Секретная пасхалка: несколько быстрых кликов по роботу
@@ -726,11 +766,9 @@ companionSvg.addEventListener("click", () => {
 });
 
 function triggerEasterEgg() {
-  const data = loadData();
-  if (!data.users[currentUser]) data.users[currentUser] = { checked: [] };
-  const alreadyFound = Boolean(data.users[currentUser].easterEgg);
-  data.users[currentUser].easterEgg = true;
-  saveData(data);
+  const alreadyFound = hasEasterEgg();
+  if (currentUserData) currentUserData.easterEgg = true;
+  saveStudentData(currentUser, { easterEgg: true });
 
   companionSvg.classList.remove("egg-spin");
   void companionSvg.offsetWidth;
@@ -741,13 +779,13 @@ function triggerEasterEgg() {
     showToast("🥚 Секретная пасхалка найдена! Робот теперь умеет танцевать.");
   }
 
-  const checked = new Set(getUserChecked(currentUser));
+  const checked = new Set(getUserChecked());
   const percent = Math.round((checked.size / ACHIEVEMENTS.length) * 100);
   renderCompanion(percent);
 }
 
 function toggleAchievement(id) {
-  const checkedBefore = new Set(getUserChecked(currentUser));
+  const checkedBefore = new Set(getUserChecked());
   const wasComplete = checkedBefore.size === ACHIEVEMENTS.length;
   const badgesBefore = getBadgeStatus(checkedBefore)
     .filter((s) => s.unlocked)
@@ -760,8 +798,8 @@ function toggleAchievement(id) {
     checked.add(id);
   }
 
-  setUserChecked(currentUser, Array.from(checked));
-  touchLastActive(currentUser);
+  setUserChecked(Array.from(checked));
+  touchLastActive();
   renderAchievements();
 
   const badgesAfter = getBadgeStatus(checked).filter((s) => s.unlocked).map((s) => s.category);
@@ -830,13 +868,13 @@ printCertificateBtn.addEventListener("click", () => {
 });
 
 function openCertificate() {
-  const checked = new Set(getUserChecked(currentUser));
+  const checked = new Set(getUserChecked());
   const percent = Math.round((checked.size / ACHIEVEMENTS.length) * 100);
   const level = getLevel(percent);
   const achievementXp = ACHIEVEMENTS.filter((a) => checked.has(a.id)).reduce((sum, a) => sum + a.xp, 0);
-  const quizBonusXp = getQuizBonusXp(currentUser);
-  const quizPassedCount = getQuizPassedCount(currentUser);
-  const userQuizzes = getUserQuizzes(currentUser);
+  const quizBonusXp = getQuizBonusXp();
+  const quizPassedCount = getQuizPassedCount();
+  const userQuizzes = getUserQuizzes();
 
   certName.textContent = currentUser;
   certLevel.textContent = level.title;
@@ -845,7 +883,7 @@ function openCertificate() {
   certXp.textContent = achievementXp + quizBonusXp;
   certQuizCount.textContent = quizPassedCount;
   certDate.textContent = new Date().toLocaleDateString("ru-RU");
-  certEgg.hidden = !hasEasterEgg(currentUser);
+  certEgg.hidden = !hasEasterEgg();
 
   certBadges.innerHTML = "";
   getBadgeStatus(checked)
@@ -872,10 +910,16 @@ function openCertificate() {
   certificate.hidden = false;
 }
 
-function showMainScreen(name) {
-  ensureUserRegistered(name);
-  currentUser = name;
-  userNameEl.textContent = name;
+async function showMainScreen(name) {
+  try {
+    currentUserData = await loadOrCreateStudent(name);
+  } catch (e) {
+    console.error(e);
+    showToast(NETWORK_ERROR_TOAST);
+    return;
+  }
+  currentUser = currentUserData.name || name;
+  userNameEl.textContent = currentUser;
   loginScreen.hidden = true;
   teacherScreen.hidden = true;
   mainScreen.hidden = false;
@@ -885,21 +929,36 @@ function showMainScreen(name) {
 
 function showLoginScreen() {
   currentUser = null;
-  fillNamesList();
-  renderLeaderboard();
+  currentUserData = null;
   mainScreen.hidden = true;
   teacherScreen.hidden = true;
   loginScreen.hidden = false;
   nameInput.value = "";
   nameInput.focus();
+  fillNamesList();
+  renderLeaderboard();
 }
 
-loginForm.addEventListener("submit", (e) => {
+loginForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const raw = nameInput.value.trim().replace(/\s+/g, " ");
   if (!raw) return;
-  const existing = findExistingName(raw);
-  showMainScreen(existing || raw);
+
+  const submitBtn = loginForm.querySelector('button[type="submit"]');
+  const originalLabel = submitBtn.textContent;
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Загрузка…";
+
+  try {
+    const existing = await findExistingName(raw);
+    await showMainScreen(existing || raw);
+  } catch (err) {
+    console.error(err);
+    showToast(NETWORK_ERROR_TOAST);
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = originalLabel;
+  }
 });
 
 switchUserBtn.addEventListener("click", showLoginScreen);
@@ -908,44 +967,56 @@ resetBtn.addEventListener("click", () => {
   if (!currentUser) return;
   const ok = confirm(`Сбросить весь прогресс ученика «${currentUser}», включая результаты тестов?`);
   if (!ok) return;
-  setUserChecked(currentUser, []);
-  const data = loadData();
-  if (data.users[currentUser]) {
-    data.users[currentUser].quizzes = {};
-    saveData(data);
-  }
+  currentUserData.checked = [];
+  currentUserData.quizzes = {};
+  saveStudentData(currentUser, { checked: [], quizzes: {} });
   renderAchievements();
   renderQuizzes();
 });
 
-function getAllStudentsData() {
-  const data = loadData();
-  return Object.keys(data.users)
-    .map((name) => {
-      const checked = (data.users[name] && data.users[name].checked) || [];
+async function getAllStudentsData() {
+  const snap = await getDocs(studentsCol);
+  return snap.docs
+    .map((d) => {
+      const data = d.data();
+      const checked = data.checked || [];
       const checkedSet = new Set(checked);
+      const quizzes = data.quizzes || {};
       const achievementXp = ACHIEVEMENTS.filter((a) => checkedSet.has(a.id)).reduce((sum, a) => sum + a.xp, 0);
-      const quizBonusXp = getQuizBonusXp(name);
+      const quizBonusXp = computeQuizBonusXp(quizzes);
       const percent = Math.round((checked.length / ACHIEVEMENTS.length) * 100);
       const badgesCount = getBadgeStatus(checkedSet).filter((s) => s.unlocked).length;
-      const quizCount = getQuizPassedCount(name);
+      const quizCount = computeQuizPassedCount(quizzes);
       return {
-        name,
+        name: data.name || d.id,
         count: checked.length,
         xp: achievementXp + quizBonusXp,
         percent,
         badgesCount,
         quizCount,
         level: getLevel(percent),
-        lastActive: data.users[name] && data.users[name].lastActive,
-        note: getUserNote(name),
+        lastActive: data.lastActive,
+        note: data.note || "",
       };
     })
     .sort((a, b) => b.xp - a.xp || a.name.localeCompare(b.name, "ru"));
 }
 
-function renderTeacherPanel() {
-  const students = getAllStudentsData();
+async function renderTeacherPanel() {
+  teacherStats.innerHTML = "";
+  teacherTableBody.innerHTML =
+    '<tr><td colspan="9" class="teacher-empty">Загрузка данных…</td></tr>';
+
+  let students;
+  try {
+    students = await getAllStudentsData();
+  } catch (e) {
+    console.error(e);
+    teacherTableBody.innerHTML =
+      '<tr><td colspan="9" class="teacher-empty">Не удалось загрузить данные — проверь интернет-соединение.</td></tr>';
+    return;
+  }
+
   const totalXp = students.reduce((sum, u) => sum + u.xp, 0);
   const avgPercent = students.length
     ? Math.round(students.reduce((sum, u) => sum + u.percent, 0) / students.length)
@@ -1006,19 +1077,23 @@ function renderTeacherPanel() {
   });
 }
 
-function deleteStudent(name) {
+async function deleteStudent(name) {
   const ok = confirm(`Удалить ученика «${name}» и весь его прогресс без возможности восстановления?`);
   if (!ok) return;
-  const data = loadData();
-  delete data.users[name];
-  saveData(data);
+  try {
+    await deleteDoc(studentRef(name));
+  } catch (e) {
+    console.error(e);
+    showToast(NETWORK_ERROR_TOAST);
+    return;
+  }
   renderTeacherPanel();
 }
 
 teacherPanelBtn.addEventListener("click", () => {
-  renderTeacherPanel();
   loginScreen.hidden = true;
   teacherScreen.hidden = false;
+  renderTeacherPanel();
 });
 
 closeTeacherBtn.addEventListener("click", () => {
