@@ -275,7 +275,39 @@ input[type="password"]:focus {
   line-height: 1.6;
 }
 
-.group-topics-list {
+/* Подвкладки внутри группы: Тесты / Лекции / Ресурсы */
+.sub-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 14px;
+}
+
+.sub-tab {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+
+.sub-tab:hover {
+  color: var(--text);
+}
+
+.sub-tab.active {
+  background: linear-gradient(135deg, rgba(53,208,186,0.18), rgba(124,92,255,0.12));
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.content-item-list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -284,7 +316,211 @@ input[type="password"]:focus {
   gap: 8px;
 }
 
-/* Заметка: топик пока плейсхолдер, наполнение будет позже */
+.content-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color .15s ease;
+}
+
+.content-item:hover {
+  border-color: var(--accent);
+}
+
+.content-item-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.content-item-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.content-item-arrow {
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.resource-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  transition: border-color .15s ease;
+}
+
+.resource-link:hover {
+  border-color: var(--accent);
+}
+
+/* Редактор лекции */
+.lecture-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lecture-form textarea {
+  width: 100%;
+  background: #0d1320;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  resize: vertical;
+}
+
+.lecture-form textarea:focus {
+  border-color: var(--accent);
+}
+
+.lecture-body {
+  white-space: pre-wrap;
+  line-height: 1.6;
+  font-size: 14.5px;
+  color: var(--text);
+  margin-bottom: 16px;
+}
+
+.lecture-file-link {
+  display: inline-block;
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+  margin-top: 10px;
+}
+
+.lecture-video-embed {
+  position: relative;
+  width: 100%;
+  padding-top: 56.25%;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.lecture-video-embed iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.lecture-video-link {
+  display: inline-block;
+  margin-bottom: 16px;
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+/* Панель педагога: управление содержимым группы */
+.manage-section {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  margin-top: 16px;
+}
+
+.manage-section:first-of-type {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.test-title-input {
+  margin-bottom: 14px;
+}
+
+.question-block {
+  background: #0d1320;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.question-block input[type="text"] {
+  margin-bottom: 8px;
+}
+
+.question-option-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.question-option-row input[type="radio"] {
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
+.question-remove-btn {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--danger);
+  border-radius: 8px;
+  padding: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  margin-top: 6px;
+}
+
+/* Прохождение теста учеником */
+.take-test-question {
+  margin-bottom: 18px;
+}
+
+.take-test-question-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.take-test-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #0d1320;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  margin-bottom: 6px;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.take-test-option input {
+  accent-color: var(--accent);
+}
+
+.take-test-result-score {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+  margin: 10px 0;
+  color: var(--accent);
+}
 
 .toast {
   position: fixed;

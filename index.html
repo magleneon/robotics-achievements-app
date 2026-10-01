@@ -8,7 +8,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%9A%3C/text%3E%3C/svg%3E">
 <!-- При каждом деплое с изменениями в style.css/script.js увеличивай ?v= у обоих —
      иначе Safari и другие браузеры могут долго держать старую закэшированную версию. -->
-<link rel="stylesheet" href="style.css?v=2">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 
@@ -136,7 +136,6 @@
             <th>Логин</th>
             <th>Группы</th>
             <th>Была активность</th>
-            <th class="no-print">Заметка</th>
             <th class="no-print"></th>
           </tr>
         </thead>
@@ -158,19 +157,87 @@
     </div>
   </div>
 
-  <!-- Управление занятиями группы -->
-  <div id="manageTopicsModal" class="quiz-overlay" hidden>
+  <!-- Управление содержимым группы -->
+  <div id="manageContentModal" class="quiz-overlay" hidden>
     <div class="quiz-modal-card">
-      <button id="closeManageTopics" type="button" class="btn quiz-close" aria-label="Закрыть">✕</button>
-      <h2 class="quiz-title">Занятия группы</h2>
-      <p id="manageTopicsName" class="quiz-desc"></p>
-      <div id="topicsList" class="groups-list"></div>
-      <button id="addTopicBtn" type="button" class="btn btn-primary" style="width:100%; margin-top:16px;">➕ Добавить занятие</button>
+      <button id="closeManageContent" type="button" class="btn quiz-close" aria-label="Закрыть">✕</button>
+      <h2 class="quiz-title">Содержимое группы</h2>
+      <p id="manageContentName" class="quiz-desc"></p>
+
+      <div class="manage-section">
+        <div class="section-title">🧪 Тесты</div>
+        <div id="manageTestsList" class="groups-list"></div>
+        <button id="addTestBtn" type="button" class="btn btn-ghost" style="width:100%; margin-top:10px;">➕ Добавить тест</button>
+      </div>
+
+      <div class="manage-section">
+        <div class="section-title">📖 Лекции</div>
+        <div id="manageLecturesList" class="groups-list"></div>
+        <button id="addLectureBtn" type="button" class="btn btn-ghost" style="width:100%; margin-top:10px;">➕ Добавить лекцию</button>
+      </div>
+
+      <div class="manage-section">
+        <div class="section-title">🔗 Полезные ресурсы</div>
+        <div id="manageResourcesList" class="groups-list"></div>
+        <form id="addResourceForm" class="add-group-form" style="margin-top:10px;">
+          <input type="text" id="newResourceLabel" placeholder="Название ссылки" maxlength="60" required>
+          <input type="text" id="newResourceUrl" placeholder="https://…" maxlength="500" required>
+          <button type="submit" class="btn btn-ghost">Добавить</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Редактор лекции -->
+  <div id="lectureEditorModal" class="quiz-overlay" hidden>
+    <div class="quiz-modal-card">
+      <button id="closeLectureEditor" type="button" class="btn quiz-close" aria-label="Закрыть">✕</button>
+      <h2 class="quiz-title">Лекция</h2>
+      <form id="lectureEditorForm" class="lecture-form">
+        <input type="text" id="lectureTitleInput" placeholder="Название лекции" maxlength="100" required>
+        <textarea id="lectureBodyInput" placeholder="Текст лекции…" rows="8"></textarea>
+        <input type="text" id="lectureVideoInput" placeholder="Ссылка на видео (YouTube и т.п.) — необязательно" maxlength="300">
+        <input type="text" id="lectureFileInput" placeholder="Ссылка на файл/задание (Google Диск и т.п.) — необязательно" maxlength="500">
+        <button type="submit" class="btn btn-primary">Сохранить лекцию</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Редактор теста -->
+  <div id="testEditorModal" class="quiz-overlay" hidden>
+    <div class="quiz-modal-card">
+      <button id="closeTestEditor" type="button" class="btn quiz-close" aria-label="Закрыть">✕</button>
+      <h2 class="quiz-title">Тест</h2>
+      <input type="text" id="testTitleInput" placeholder="Название теста" maxlength="100" class="test-title-input">
+      <div id="testQuestionsList"></div>
+      <button type="button" id="addQuestionBtn" class="btn btn-ghost" style="width:100%; margin: 10px 0;">➕ Добавить вопрос</button>
+      <button type="button" id="saveTestBtn" class="btn btn-primary" style="width:100%;">Сохранить тест</button>
+    </div>
+  </div>
+
+  <!-- Прохождение теста учеником -->
+  <div id="takeTestModal" class="quiz-overlay" hidden>
+    <div class="quiz-modal-card">
+      <button id="closeTakeTest" type="button" class="btn quiz-close" aria-label="Закрыть">✕</button>
+      <h2 id="takeTestTitle" class="quiz-title">Тест</h2>
+      <form id="takeTestForm"></form>
+      <div id="takeTestResult" hidden></div>
+    </div>
+  </div>
+
+  <!-- Просмотр лекции -->
+  <div id="viewLectureModal" class="quiz-overlay" hidden>
+    <div class="quiz-modal-card">
+      <button id="closeViewLecture" type="button" class="btn quiz-close" aria-label="Закрыть">✕</button>
+      <h2 id="viewLectureTitle" class="quiz-title"></h2>
+      <div id="viewLectureBody" class="lecture-body"></div>
+      <div id="viewLectureVideo"></div>
+      <a id="viewLectureFile" class="lecture-file-link" href="#" target="_blank" rel="noopener" hidden>📎 Файл / задание</a>
     </div>
   </div>
 
 </div>
 
-<script type="module" src="script.js?v=2"></script>
+<script type="module" src="script.js?v=3"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-// Учебная платформа: группы, темы и учёт учеников.
+// Учебная платформа: группы, лекции, тесты и полезные ресурсы.
 // Данные хранятся в общей базе Firestore — доступны с любого устройства.
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -76,16 +76,51 @@ const editGroupsName = document.getElementById("editGroupsName");
 const editGroupsCheckboxes = document.getElementById("editGroupsCheckboxes");
 const saveEditGroups = document.getElementById("saveEditGroups");
 
-const manageTopicsModal = document.getElementById("manageTopicsModal");
-const closeManageTopics = document.getElementById("closeManageTopics");
-const manageTopicsName = document.getElementById("manageTopicsName");
-const topicsListEl = document.getElementById("topicsList");
-const addTopicBtn = document.getElementById("addTopicBtn");
+const manageContentModal = document.getElementById("manageContentModal");
+const closeManageContent = document.getElementById("closeManageContent");
+const manageContentName = document.getElementById("manageContentName");
+const manageTestsList = document.getElementById("manageTestsList");
+const addTestBtn = document.getElementById("addTestBtn");
+const manageLecturesList = document.getElementById("manageLecturesList");
+const addLectureBtn = document.getElementById("addLectureBtn");
+const manageResourcesList = document.getElementById("manageResourcesList");
+const addResourceForm = document.getElementById("addResourceForm");
+const newResourceLabel = document.getElementById("newResourceLabel");
+const newResourceUrl = document.getElementById("newResourceUrl");
+
+const lectureEditorModal = document.getElementById("lectureEditorModal");
+const closeLectureEditor = document.getElementById("closeLectureEditor");
+const lectureEditorForm = document.getElementById("lectureEditorForm");
+const lectureTitleInput = document.getElementById("lectureTitleInput");
+const lectureBodyInput = document.getElementById("lectureBodyInput");
+const lectureVideoInput = document.getElementById("lectureVideoInput");
+const lectureFileInput = document.getElementById("lectureFileInput");
+
+const testEditorModal = document.getElementById("testEditorModal");
+const closeTestEditor = document.getElementById("closeTestEditor");
+const testTitleInput = document.getElementById("testTitleInput");
+const testQuestionsList = document.getElementById("testQuestionsList");
+const addQuestionBtn = document.getElementById("addQuestionBtn");
+const saveTestBtn = document.getElementById("saveTestBtn");
+
+const takeTestModal = document.getElementById("takeTestModal");
+const closeTakeTest = document.getElementById("closeTakeTest");
+const takeTestTitle = document.getElementById("takeTestTitle");
+const takeTestForm = document.getElementById("takeTestForm");
+const takeTestResult = document.getElementById("takeTestResult");
+
+const viewLectureModal = document.getElementById("viewLectureModal");
+const closeViewLecture = document.getElementById("closeViewLecture");
+const viewLectureTitle = document.getElementById("viewLectureTitle");
+const viewLectureBody = document.getElementById("viewLectureBody");
+const viewLectureVideo = document.getElementById("viewLectureVideo");
+const viewLectureFile = document.getElementById("viewLectureFile");
 
 let currentUser = null;
 let currentUserData = null; // кэш документа текущего ученика из Firestore
 let allGroupsCache = [];    // кэш списка всех групп (обновляется при входе/открытии панели)
 let activeGroupId = null;
+let activeSubTab = "tests"; // tests | lectures | resources
 let editingStudentName = null;
 
 // ---------- Утилиты ----------
@@ -100,6 +135,10 @@ function studentRef(name) {
 
 function groupRef(name) {
   return doc(db, "groups", normalizeName(name));
+}
+
+function genId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
 async function sha256Hex(text) {
@@ -132,10 +171,6 @@ function touchLastActive() {
   saveStudentData(currentUser, { lastActive: ts });
 }
 
-function setUserNote(name, note) {
-  saveStudentData(name, { note });
-}
-
 function formatRelativeDate(ts) {
   if (!ts) return "—";
   const diffDays = Math.floor((Date.now() - ts) / 86400000);
@@ -157,12 +192,23 @@ function showToast(message) {
   }, 2600);
 }
 
+function toYouTubeEmbed(url) {
+  const m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{6,})/);
+  return m ? `https://www.youtube.com/embed/${m[1]}` : null;
+}
+
 // ---------- Группы ----------
 
 async function getAllGroups() {
   const snap = await getDocs(groupsCol);
   return snap.docs
-    .map((d) => ({ id: d.id, name: d.data().name || d.id, topics: d.data().topics || [] }))
+    .map((d) => ({
+      id: d.id,
+      name: d.data().name || d.id,
+      lectures: d.data().lectures || [],
+      tests: d.data().tests || [],
+      resources: d.data().resources || [],
+    }))
     .sort((a, b) => a.name.localeCompare(b.name, "ru"));
 }
 
@@ -172,7 +218,7 @@ async function createGroup(name) {
   if (existing.exists()) {
     return { ok: false, reason: "exists" };
   }
-  await setDoc(ref, { name, topics: [] });
+  await setDoc(ref, { name, lectures: [], tests: [], resources: [] });
   return { ok: true };
 }
 
@@ -208,12 +254,12 @@ async function renderGroupsManagement() {
       pill.className = "group-pill";
       pill.innerHTML = `${g.name} `;
 
-      const topicsBtn = document.createElement("button");
-      topicsBtn.type = "button";
-      topicsBtn.textContent = "⚙️";
-      topicsBtn.setAttribute("aria-label", `Занятия группы ${g.name}`);
-      topicsBtn.addEventListener("click", () => openManageTopics(g.id));
-      pill.appendChild(topicsBtn);
+      const contentBtn = document.createElement("button");
+      contentBtn.type = "button";
+      contentBtn.textContent = "⚙️";
+      contentBtn.setAttribute("aria-label", `Содержимое группы ${g.name}`);
+      contentBtn.addEventListener("click", () => openManageContent(g.id));
+      pill.appendChild(contentBtn);
 
       const delBtn = document.createElement("button");
       delBtn.type = "button";
@@ -254,76 +300,6 @@ function populateExportGroupSelect() {
   });
 }
 
-// ---------- Занятия внутри группы ----------
-
-let managingGroupId = null;
-
-function openManageTopics(groupId) {
-  managingGroupId = groupId;
-  const group = allGroupsCache.find((g) => g.id === groupId);
-  if (!group) return;
-  manageTopicsName.textContent = group.name;
-  renderTopicsList(group.topics);
-  manageTopicsModal.hidden = false;
-}
-
-function renderTopicsList(topics) {
-  topicsListEl.innerHTML = "";
-  if (!topics || topics.length === 0) {
-    topicsListEl.innerHTML = '<p class="group-checkboxes-empty">Занятий пока нет.</p>';
-    return;
-  }
-  topics.forEach((topic, index) => {
-    const pill = document.createElement("span");
-    pill.className = "group-pill";
-    pill.innerHTML = `${topic} `;
-    const delBtn = document.createElement("button");
-    delBtn.type = "button";
-    delBtn.textContent = "✕";
-    delBtn.setAttribute("aria-label", `Удалить ${topic}`);
-    delBtn.addEventListener("click", () => removeTopic(index));
-    pill.appendChild(delBtn);
-    topicsListEl.appendChild(pill);
-  });
-}
-
-async function addTopic() {
-  const group = allGroupsCache.find((g) => g.id === managingGroupId);
-  if (!group) return;
-  addTopicBtn.disabled = true;
-  const topics = [...(group.topics || []), `Занятие ${(group.topics || []).length + 1}`];
-  try {
-    await setDoc(groupRef(managingGroupId), { topics }, { merge: true });
-    group.topics = topics;
-    renderTopicsList(topics);
-  } catch (e) {
-    console.error(e);
-    showToast(NETWORK_ERROR_TOAST);
-  } finally {
-    addTopicBtn.disabled = false;
-  }
-}
-
-async function removeTopic(index) {
-  const group = allGroupsCache.find((g) => g.id === managingGroupId);
-  if (!group) return;
-  const topics = (group.topics || []).filter((_, i) => i !== index);
-  try {
-    await setDoc(groupRef(managingGroupId), { topics }, { merge: true });
-    group.topics = topics;
-    renderTopicsList(topics);
-  } catch (e) {
-    console.error(e);
-    showToast(NETWORK_ERROR_TOAST);
-  }
-}
-
-addTopicBtn.addEventListener("click", addTopic);
-
-closeManageTopics.addEventListener("click", () => {
-  manageTopicsModal.hidden = true;
-});
-
 addGroupForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const name = newGroupName.value.trim();
@@ -347,6 +323,339 @@ addGroupForm.addEventListener("submit", async (e) => {
   }
 });
 
+// ---------- Содержимое группы: управление (педагог) ----------
+
+let managingGroupId = null;
+let editingLectureId = null;
+let editingTestId = null;
+let currentQuestions = [];
+
+function openManageContent(groupId) {
+  managingGroupId = groupId;
+  const group = allGroupsCache.find((g) => g.id === groupId);
+  if (!group) return;
+  manageContentName.textContent = group.name;
+  renderManageLists(group);
+  manageContentModal.hidden = false;
+}
+
+function renderManageLists(group) {
+  manageTestsList.innerHTML = "";
+  if (!(group.tests || []).length) {
+    manageTestsList.innerHTML = '<p class="group-checkboxes-empty">Тестов пока нет.</p>';
+  } else {
+    group.tests.forEach((t) => {
+      const pill = document.createElement("span");
+      pill.className = "group-pill";
+      pill.style.cursor = "pointer";
+      pill.innerHTML = `${t.title} (${(t.questions || []).length}) `;
+      pill.addEventListener("click", () => openEditTest(t));
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.textContent = "✕";
+      delBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        removeTest(t.id);
+      });
+      pill.appendChild(delBtn);
+      manageTestsList.appendChild(pill);
+    });
+  }
+
+  manageLecturesList.innerHTML = "";
+  if (!(group.lectures || []).length) {
+    manageLecturesList.innerHTML = '<p class="group-checkboxes-empty">Лекций пока нет.</p>';
+  } else {
+    group.lectures.forEach((l) => {
+      const pill = document.createElement("span");
+      pill.className = "group-pill";
+      pill.style.cursor = "pointer";
+      pill.innerHTML = `${l.title} `;
+      pill.addEventListener("click", () => openEditLecture(l));
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.textContent = "✕";
+      delBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        removeLecture(l.id);
+      });
+      pill.appendChild(delBtn);
+      manageLecturesList.appendChild(pill);
+    });
+  }
+
+  manageResourcesList.innerHTML = "";
+  if (!(group.resources || []).length) {
+    manageResourcesList.innerHTML = '<p class="group-checkboxes-empty">Ссылок пока нет.</p>';
+  } else {
+    group.resources.forEach((r, idx) => {
+      const pill = document.createElement("span");
+      pill.className = "group-pill";
+      pill.innerHTML = `${r.label} `;
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.textContent = "✕";
+      delBtn.addEventListener("click", () => removeResource(idx));
+      pill.appendChild(delBtn);
+      manageResourcesList.appendChild(pill);
+    });
+  }
+}
+
+closeManageContent.addEventListener("click", () => {
+  manageContentModal.hidden = true;
+});
+
+// --- Ресурсы ---
+
+addResourceForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const label = newResourceLabel.value.trim();
+  const url = newResourceUrl.value.trim();
+  if (!label || !url) return;
+  const group = allGroupsCache.find((g) => g.id === managingGroupId);
+  if (!group) return;
+  const resources = [...(group.resources || []), { label, url }];
+  try {
+    await setDoc(groupRef(managingGroupId), { resources }, { merge: true });
+    group.resources = resources;
+    renderManageLists(group);
+    newResourceLabel.value = "";
+    newResourceUrl.value = "";
+  } catch (err) {
+    console.error(err);
+    showToast(NETWORK_ERROR_TOAST);
+  }
+});
+
+async function removeResource(idx) {
+  const group = allGroupsCache.find((g) => g.id === managingGroupId);
+  if (!group) return;
+  const resources = (group.resources || []).filter((_, i) => i !== idx);
+  try {
+    await setDoc(groupRef(managingGroupId), { resources }, { merge: true });
+    group.resources = resources;
+    renderManageLists(group);
+  } catch (e) {
+    console.error(e);
+    showToast(NETWORK_ERROR_TOAST);
+  }
+}
+
+// --- Лекции ---
+
+addLectureBtn.addEventListener("click", () => {
+  editingLectureId = null;
+  lectureTitleInput.value = "";
+  lectureBodyInput.value = "";
+  lectureVideoInput.value = "";
+  lectureFileInput.value = "";
+  lectureEditorModal.hidden = false;
+});
+
+function openEditLecture(l) {
+  editingLectureId = l.id;
+  lectureTitleInput.value = l.title;
+  lectureBodyInput.value = l.body || "";
+  lectureVideoInput.value = l.videoUrl || "";
+  lectureFileInput.value = l.fileUrl || "";
+  lectureEditorModal.hidden = false;
+}
+
+lectureEditorForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const title = lectureTitleInput.value.trim();
+  const body = lectureBodyInput.value.trim();
+  const videoUrl = lectureVideoInput.value.trim();
+  const fileUrl = lectureFileInput.value.trim();
+  if (!title) return;
+
+  const group = allGroupsCache.find((g) => g.id === managingGroupId);
+  if (!group) return;
+  const lectures = [...(group.lectures || [])];
+  if (editingLectureId) {
+    const idx = lectures.findIndex((l) => l.id === editingLectureId);
+    if (idx !== -1) lectures[idx] = { id: editingLectureId, title, body, videoUrl, fileUrl };
+  } else {
+    lectures.push({ id: genId(), title, body, videoUrl, fileUrl });
+  }
+
+  try {
+    await setDoc(groupRef(managingGroupId), { lectures }, { merge: true });
+    group.lectures = lectures;
+    renderManageLists(group);
+    lectureEditorModal.hidden = true;
+  } catch (err) {
+    console.error(err);
+    showToast(NETWORK_ERROR_TOAST);
+  }
+});
+
+async function removeLecture(id) {
+  const ok = confirm("Удалить эту лекцию?");
+  if (!ok) return;
+  const group = allGroupsCache.find((g) => g.id === managingGroupId);
+  if (!group) return;
+  const lectures = (group.lectures || []).filter((l) => l.id !== id);
+  try {
+    await setDoc(groupRef(managingGroupId), { lectures }, { merge: true });
+    group.lectures = lectures;
+    renderManageLists(group);
+  } catch (e) {
+    console.error(e);
+    showToast(NETWORK_ERROR_TOAST);
+  }
+}
+
+closeLectureEditor.addEventListener("click", () => {
+  lectureEditorModal.hidden = true;
+});
+
+// --- Тесты ---
+
+addTestBtn.addEventListener("click", () => {
+  editingTestId = null;
+  testTitleInput.value = "";
+  currentQuestions = [];
+  renderQuestionsEditor();
+  testEditorModal.hidden = false;
+});
+
+function openEditTest(t) {
+  editingTestId = t.id;
+  testTitleInput.value = t.title;
+  currentQuestions = JSON.parse(JSON.stringify(t.questions || []));
+  renderQuestionsEditor();
+  testEditorModal.hidden = false;
+}
+
+function renderQuestionsEditor() {
+  testQuestionsList.innerHTML = "";
+  currentQuestions.forEach((q, qi) => {
+    const block = document.createElement("div");
+    block.className = "question-block";
+
+    const qInput = document.createElement("input");
+    qInput.type = "text";
+    qInput.placeholder = `Вопрос ${qi + 1}`;
+    qInput.value = q.q || "";
+    qInput.addEventListener("input", () => {
+      q.q = qInput.value;
+    });
+    block.appendChild(qInput);
+
+    if (!q.options || q.options.length === 0) q.options = ["", "", "", ""];
+
+    q.options.forEach((opt, oi) => {
+      const row = document.createElement("div");
+      row.className = "question-option-row";
+
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.name = `correct-${qi}`;
+      radio.checked = q.correct === oi;
+      radio.addEventListener("change", () => {
+        q.correct = oi;
+      });
+      row.appendChild(radio);
+
+      const optInput = document.createElement("input");
+      optInput.type = "text";
+      optInput.placeholder = `Вариант ${oi + 1}`;
+      optInput.value = opt;
+      optInput.style.flex = "1";
+      optInput.addEventListener("input", () => {
+        q.options[oi] = optInput.value;
+      });
+      row.appendChild(optInput);
+
+      block.appendChild(row);
+    });
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "question-remove-btn";
+    removeBtn.textContent = "Удалить вопрос";
+    removeBtn.addEventListener("click", () => {
+      currentQuestions.splice(qi, 1);
+      renderQuestionsEditor();
+    });
+    block.appendChild(removeBtn);
+
+    testQuestionsList.appendChild(block);
+  });
+}
+
+addQuestionBtn.addEventListener("click", () => {
+  currentQuestions.push({ q: "", options: ["", "", "", ""], correct: 0 });
+  renderQuestionsEditor();
+});
+
+saveTestBtn.addEventListener("click", async () => {
+  const title = testTitleInput.value.trim();
+  if (!title) {
+    showToast("Укажи название теста.");
+    return;
+  }
+  if (currentQuestions.length === 0) {
+    showToast("Добавь хотя бы один вопрос.");
+    return;
+  }
+
+  const cleanQuestions = currentQuestions
+    .map((q) => ({
+      q: (q.q || "").trim(),
+      options: (q.options || []).map((o) => (o || "").trim()),
+      correct: q.correct || 0,
+    }))
+    .filter((q) => q.q && q.options.filter(Boolean).length >= 2);
+
+  if (cleanQuestions.length === 0) {
+    showToast("Заполни вопросы и минимум по два варианта ответа.");
+    return;
+  }
+
+  const group = allGroupsCache.find((g) => g.id === managingGroupId);
+  if (!group) return;
+  const tests = [...(group.tests || [])];
+  if (editingTestId) {
+    const idx = tests.findIndex((t) => t.id === editingTestId);
+    if (idx !== -1) tests[idx] = { id: editingTestId, title, questions: cleanQuestions };
+  } else {
+    tests.push({ id: genId(), title, questions: cleanQuestions });
+  }
+
+  try {
+    await setDoc(groupRef(managingGroupId), { tests }, { merge: true });
+    group.tests = tests;
+    renderManageLists(group);
+    testEditorModal.hidden = true;
+  } catch (e) {
+    console.error(e);
+    showToast(NETWORK_ERROR_TOAST);
+  }
+});
+
+async function removeTest(id) {
+  const ok = confirm("Удалить этот тест?");
+  if (!ok) return;
+  const group = allGroupsCache.find((g) => g.id === managingGroupId);
+  if (!group) return;
+  const tests = (group.tests || []).filter((t) => t.id !== id);
+  try {
+    await setDoc(groupRef(managingGroupId), { tests }, { merge: true });
+    group.tests = tests;
+    renderManageLists(group);
+  } catch (e) {
+    console.error(e);
+    showToast(NETWORK_ERROR_TOAST);
+  }
+}
+
+closeTestEditor.addEventListener("click", () => {
+  testEditorModal.hidden = true;
+});
+
 // ---------- Экран ученика: вкладки групп ----------
 
 function renderGroupTabs() {
@@ -367,6 +676,7 @@ function renderGroupTabs() {
     if (isMember) {
       tab.addEventListener("click", () => {
         activeGroupId = g.id;
+        activeSubTab = "tests";
         renderGroupTabs();
         renderGroupContent();
       });
@@ -386,7 +696,7 @@ function renderGroupTabs() {
 function renderGroupContent() {
   if (!activeGroupId) {
     groupContentEl.innerHTML =
-      '<p class="group-content-empty">Педагог пока не добавил тебя ни в одну группу. Как только добавит — здесь появятся темы занятий.</p>';
+      '<p class="group-content-empty">Педагог пока не добавил тебя ни в одну группу. Как только добавит — здесь появятся материалы.</p>';
     return;
   }
 
@@ -396,21 +706,182 @@ function renderGroupContent() {
     return;
   }
 
-  if (!group.topics || group.topics.length === 0) {
-    groupContentEl.innerHTML = `
-      <div class="group-content-title">${group.name}</div>
-      <p class="group-content-empty">Темы для этой группы пока не добавлены педагогом.</p>
-    `;
-    return;
-  }
+  const tabs = [
+    { id: "tests", label: "🧪 Тесты" },
+    { id: "lectures", label: "📖 Лекции" },
+    { id: "resources", label: "🔗 Полезные ресурсы" },
+  ];
 
   groupContentEl.innerHTML = `
     <div class="group-content-title">${group.name}</div>
-    <ul class="group-topics-list">
-      ${group.topics.map((t) => `<li>${t}</li>`).join("")}
-    </ul>
+    <div class="sub-tabs">
+      ${tabs
+        .map(
+          (t) =>
+            `<button type="button" class="sub-tab${t.id === activeSubTab ? " active" : ""}" data-tab="${t.id}">${t.label}</button>`
+        )
+        .join("")}
+    </div>
+    <div id="subTabContent"></div>
   `;
+
+  groupContentEl.querySelectorAll(".sub-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      activeSubTab = btn.dataset.tab;
+      renderGroupContent();
+    });
+  });
+
+  renderSubTabContent(group);
 }
+
+function renderSubTabContent(group) {
+  const container = document.getElementById("subTabContent");
+  if (!container) return;
+
+  if (activeSubTab === "tests") {
+    const tests = group.tests || [];
+    if (tests.length === 0) {
+      container.innerHTML = '<p class="group-content-empty">Тестов пока нет.</p>';
+      return;
+    }
+    container.innerHTML = `<ul class="content-item-list">${tests
+      .map(
+        (t) =>
+          `<li class="content-item" data-id="${t.id}"><div><div class="content-item-title">${t.title}</div><div class="content-item-sub">${(t.questions || []).length} вопрос(ов)</div></div><span class="content-item-arrow">→</span></li>`
+      )
+      .join("")}</ul>`;
+    container.querySelectorAll(".content-item").forEach((el) => {
+      el.addEventListener("click", () => openTakeTest(tests.find((t) => t.id === el.dataset.id)));
+    });
+    return;
+  }
+
+  if (activeSubTab === "lectures") {
+    const lectures = group.lectures || [];
+    if (lectures.length === 0) {
+      container.innerHTML = '<p class="group-content-empty">Лекций пока нет.</p>';
+      return;
+    }
+    container.innerHTML = `<ul class="content-item-list">${lectures
+      .map(
+        (l) =>
+          `<li class="content-item" data-id="${l.id}"><div class="content-item-title">${l.title}</div><span class="content-item-arrow">→</span></li>`
+      )
+      .join("")}</ul>`;
+    container.querySelectorAll(".content-item").forEach((el) => {
+      el.addEventListener("click", () => openViewLecture(lectures.find((l) => l.id === el.dataset.id)));
+    });
+    return;
+  }
+
+  if (activeSubTab === "resources") {
+    const resources = group.resources || [];
+    if (resources.length === 0) {
+      container.innerHTML = '<p class="group-content-empty">Ссылок пока нет.</p>';
+      return;
+    }
+    container.innerHTML = `<div class="content-item-list">${resources
+      .map((r) => `<a class="resource-link" href="${r.url}" target="_blank" rel="noopener">🔗 ${r.label}</a>`)
+      .join("")}</div>`;
+  }
+}
+
+// --- Просмотр лекции (ученик) ---
+
+function openViewLecture(lecture) {
+  if (!lecture) return;
+  viewLectureTitle.textContent = lecture.title;
+  viewLectureBody.textContent = lecture.body || "";
+
+  viewLectureVideo.innerHTML = "";
+  if (lecture.videoUrl) {
+    const embedUrl = toYouTubeEmbed(lecture.videoUrl);
+    if (embedUrl) {
+      viewLectureVideo.innerHTML = `<div class="lecture-video-embed"><iframe src="${embedUrl}" allowfullscreen></iframe></div>`;
+    } else {
+      const a = document.createElement("a");
+      a.className = "lecture-video-link";
+      a.href = lecture.videoUrl;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = "▶️ Открыть видео";
+      viewLectureVideo.appendChild(a);
+    }
+  }
+
+  if (lecture.fileUrl) {
+    viewLectureFile.href = lecture.fileUrl;
+    viewLectureFile.hidden = false;
+  } else {
+    viewLectureFile.hidden = true;
+  }
+
+  viewLectureModal.hidden = false;
+}
+
+closeViewLecture.addEventListener("click", () => {
+  viewLectureModal.hidden = true;
+});
+
+// --- Прохождение теста (ученик) ---
+
+let activeTakeTest = null;
+
+function openTakeTest(test) {
+  if (!test) return;
+  activeTakeTest = test;
+  takeTestTitle.textContent = test.title;
+  takeTestResult.hidden = true;
+  takeTestResult.innerHTML = "";
+  takeTestForm.hidden = false;
+  takeTestForm.innerHTML = "";
+
+  test.questions.forEach((q, qi) => {
+    const block = document.createElement("div");
+    block.className = "take-test-question";
+    const title = document.createElement("div");
+    title.className = "take-test-question-title";
+    title.textContent = `${qi + 1}. ${q.q}`;
+    block.appendChild(title);
+
+    q.options.forEach((opt, oi) => {
+      if (!opt) return;
+      const label = document.createElement("label");
+      label.className = "take-test-option";
+      label.innerHTML = `<input type="radio" name="tq${qi}" value="${oi}" required> <span>${opt}</span>`;
+      block.appendChild(label);
+    });
+
+    takeTestForm.appendChild(block);
+  });
+
+  const submitBtn = document.createElement("button");
+  submitBtn.type = "submit";
+  submitBtn.className = "btn btn-primary";
+  submitBtn.style.width = "100%";
+  submitBtn.textContent = "Проверить ответы";
+  takeTestForm.appendChild(submitBtn);
+
+  takeTestModal.hidden = false;
+}
+
+takeTestForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (!activeTakeTest) return;
+  let score = 0;
+  activeTakeTest.questions.forEach((q, qi) => {
+    const checked = takeTestForm.querySelector(`input[name="tq${qi}"]:checked`);
+    if (checked && parseInt(checked.value, 10) === q.correct) score++;
+  });
+  takeTestForm.hidden = true;
+  takeTestResult.hidden = false;
+  takeTestResult.innerHTML = `<div class="take-test-result-score">${score} из ${activeTakeTest.questions.length} правильно</div>`;
+});
+
+closeTakeTest.addEventListener("click", () => {
+  takeTestModal.hidden = true;
+});
 
 // ---------- Вход ученика ----------
 
@@ -419,6 +890,7 @@ function enterMainScreen(name, data) {
   currentUserData.groups = currentUserData.groups || [];
   currentUser = data.name || name;
   activeGroupId = null;
+  activeSubTab = "tests";
   userNameEl.textContent = currentUser;
   loginScreen.hidden = true;
   teacherScreen.hidden = true;
@@ -500,7 +972,6 @@ async function getAllStudentsData() {
         password: data.password || "",
         groups: data.groups || [],
         lastActive: data.lastActive,
-        note: data.note || "",
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name, "ru"));
@@ -513,7 +984,7 @@ function groupNameById(id) {
 
 async function renderTeacherPanel() {
   teacherStats.innerHTML = "";
-  teacherTableBody.innerHTML = '<tr><td colspan="6" class="teacher-empty">Загрузка данных…</td></tr>';
+  teacherTableBody.innerHTML = '<tr><td colspan="5" class="teacher-empty">Загрузка данных…</td></tr>';
 
   let students;
   let groups;
@@ -522,7 +993,7 @@ async function renderTeacherPanel() {
   } catch (e) {
     console.error(e);
     teacherTableBody.innerHTML =
-      '<tr><td colspan="6" class="teacher-empty">Не удалось загрузить данные — проверь интернет-соединение.</td></tr>';
+      '<tr><td colspan="5" class="teacher-empty">Не удалось загрузить данные — проверь интернет-соединение.</td></tr>';
     return;
   }
   allGroupsCache = groups;
@@ -536,7 +1007,7 @@ async function renderTeacherPanel() {
 
   if (students.length === 0) {
     teacherTableBody.innerHTML =
-      '<tr><td colspan="6" class="teacher-empty">Пока нет ни одного ученика — добавь первого выше.</td></tr>';
+      '<tr><td colspan="5" class="teacher-empty">Пока нет ни одного ученика — добавь первого выше.</td></tr>';
     return;
   }
 
@@ -570,16 +1041,6 @@ async function renderTeacherPanel() {
     activeTd.className = isStale ? "teacher-stale" : "";
     activeTd.textContent = formatRelativeDate(u.lastActive);
     tr.appendChild(activeTd);
-
-    const noteTd = document.createElement("td");
-    noteTd.className = "no-print";
-    const noteTextarea = document.createElement("textarea");
-    noteTextarea.className = "teacher-note";
-    noteTextarea.placeholder = "Заметка…";
-    noteTextarea.value = u.note;
-    noteTextarea.addEventListener("blur", () => setUserNote(u.name, noteTextarea.value));
-    noteTd.appendChild(noteTextarea);
-    tr.appendChild(noteTd);
 
     const actionsTd = document.createElement("td");
     actionsTd.className = "no-print";
@@ -707,7 +1168,6 @@ addStudentForm.addEventListener("submit", async (e) => {
       passwordHash,
       password,
       groups: selectedGroups,
-      note: "",
       lastActive: null,
     });
 
