@@ -26,8 +26,6 @@ const db = getFirestore(firebaseApp);
 const studentsCol = collection(db, "students");
 const groupsCol = collection(db, "groups");
 
-const NETWORK_ERROR_TOAST = "⚠️ Не удалось связаться с базой данных — проверь интернет-соединение.";
-
 // ---------- DOM ----------
 
 const loginScreen = document.getElementById("loginScreen");
@@ -159,10 +157,7 @@ async function verifyTeacherAuth(username, password) {
 
 function saveStudentData(name, partial) {
   if (!name) return;
-  setDoc(studentRef(name), partial, { merge: true }).catch((err) => {
-    console.error("Firestore save error:", err);
-    showToast(NETWORK_ERROR_TOAST);
-  });
+  setDoc(studentRef(name), partial, { merge: true }).catch(reportError);
 }
 
 function touchLastActive() {
@@ -190,6 +185,12 @@ function showToast(message) {
     toast.classList.remove("show");
     setTimeout(() => toast.remove(), 300);
   }, 2600);
+}
+
+function reportError(err) {
+  console.error(err);
+  const detail = (err && (err.code || err.message)) || "неизвестная ошибка";
+  showToast(`⚠️ Не удалось сохранить (${detail}). Если это повторяется — сообщи разработчику.`);
 }
 
 function toYouTubeEmbed(url) {
@@ -230,8 +231,7 @@ async function deleteGroup(groupId, groupName) {
     renderGroupsManagement();
     renderTeacherPanel();
   } catch (e) {
-    console.error(e);
-    showToast(NETWORK_ERROR_TOAST);
+    reportError(e);
   }
 }
 
@@ -423,8 +423,7 @@ addResourceForm.addEventListener("submit", async (e) => {
     newResourceLabel.value = "";
     newResourceUrl.value = "";
   } catch (err) {
-    console.error(err);
-    showToast(NETWORK_ERROR_TOAST);
+    reportError(err);
   }
 });
 
@@ -437,8 +436,7 @@ async function removeResource(idx) {
     group.resources = resources;
     renderManageLists(group);
   } catch (e) {
-    console.error(e);
-    showToast(NETWORK_ERROR_TOAST);
+    reportError(e);
   }
 }
 
@@ -486,8 +484,7 @@ lectureEditorForm.addEventListener("submit", async (e) => {
     renderManageLists(group);
     lectureEditorModal.hidden = true;
   } catch (err) {
-    console.error(err);
-    showToast(NETWORK_ERROR_TOAST);
+    reportError(err);
   }
 });
 
@@ -502,8 +499,7 @@ async function removeLecture(id) {
     group.lectures = lectures;
     renderManageLists(group);
   } catch (e) {
-    console.error(e);
-    showToast(NETWORK_ERROR_TOAST);
+    reportError(e);
   }
 }
 
@@ -631,8 +627,7 @@ saveTestBtn.addEventListener("click", async () => {
     renderManageLists(group);
     testEditorModal.hidden = true;
   } catch (e) {
-    console.error(e);
-    showToast(NETWORK_ERROR_TOAST);
+    reportError(e);
   }
 });
 
@@ -647,8 +642,7 @@ async function removeTest(id) {
     group.tests = tests;
     renderManageLists(group);
   } catch (e) {
-    console.error(e);
-    showToast(NETWORK_ERROR_TOAST);
+    reportError(e);
   }
 }
 
@@ -903,8 +897,7 @@ function enterMainScreen(name, data) {
       renderGroupTabs();
     })
     .catch((e) => {
-      console.error(e);
-      showToast(NETWORK_ERROR_TOAST);
+      reportError(e);
     });
 }
 
@@ -949,8 +942,7 @@ loginForm.addEventListener("submit", async (e) => {
     enterMainScreen(username, data);
     touchLastActive();
   } catch (err) {
-    console.error(err);
-    showToast(NETWORK_ERROR_TOAST);
+    reportError(err);
   } finally {
     submitBtn.disabled = false;
     submitBtn.textContent = originalLabel;
@@ -1080,8 +1072,7 @@ async function deleteStudent(name) {
   try {
     await deleteDoc(studentRef(name));
   } catch (e) {
-    console.error(e);
-    showToast(NETWORK_ERROR_TOAST);
+    reportError(e);
     return;
   }
   renderTeacherPanel();
@@ -1097,8 +1088,7 @@ async function resetStudentPassword(name) {
     alert(`Готово. Новый пароль для «${name}»: ${clean}`);
     renderTeacherPanel();
   } catch (e) {
-    console.error(e);
-    showToast(NETWORK_ERROR_TOAST);
+    reportError(e);
   }
 }
 
@@ -1135,8 +1125,7 @@ saveEditGroups.addEventListener("click", async () => {
     editGroupsModal.hidden = true;
     renderTeacherPanel();
   } catch (e) {
-    console.error(e);
-    showToast(NETWORK_ERROR_TOAST);
+    reportError(e);
   }
 });
 
@@ -1208,8 +1197,7 @@ exportPasswordsBtn.addEventListener("click", async () => {
   try {
     students = await getAllStudentsData();
   } catch (e) {
-    console.error(e);
-    showToast(NETWORK_ERROR_TOAST);
+    reportError(e);
     return;
   }
 
@@ -1277,8 +1265,7 @@ teacherLoginForm.addEventListener("submit", async (e) => {
     renderGroupsManagement();
     renderTeacherPanel();
   } catch (err) {
-    console.error(err);
-    showToast(NETWORK_ERROR_TOAST);
+    reportError(err);
   } finally {
     submitBtn.disabled = false;
     submitBtn.textContent = originalLabel;
