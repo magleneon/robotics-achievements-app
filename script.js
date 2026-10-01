@@ -90,7 +90,11 @@ const lectureEditorModal = document.getElementById("lectureEditorModal");
 const closeLectureEditor = document.getElementById("closeLectureEditor");
 const lectureEditorForm = document.getElementById("lectureEditorForm");
 const lectureTitleInput = document.getElementById("lectureTitleInput");
-const lectureBodyInput = document.getElementById("lectureBodyInput");
+const lectureBodyEditor = document.getElementById("lectureBodyEditor");
+const boldBtn = document.getElementById("boldBtn");
+const italicBtn = document.getElementById("italicBtn");
+const insertImageBtn = document.getElementById("insertImageBtn");
+const imageFileInput = document.getElementById("imageFileInput");
 const lectureVideoInput = document.getElementById("lectureVideoInput");
 const lectureFileInput = document.getElementById("lectureFileInput");
 
@@ -197,6 +201,121 @@ function toYouTubeEmbed(url) {
   const m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{6,})/);
   return m ? `https://www.youtube.com/embed/${m[1]}` : null;
 }
+
+// Вырезает скрипты и обработчики событий из HTML лекции перед сохранением/показом —
+// контент пишет только педагог, но на случай вставки чего-то постороннего из буфера обмена
+function sanitizeHtml(html) {
+  const template = document.createElement("template");
+  template.innerHTML = html || "";
+  const strip = (root) => {
+    Array.from(root.querySelectorAll("script, iframe, object, embed, style")).forEach((el) => el.remove());
+    Array.from(root.querySelectorAll("*")).forEach((el) => {
+      Array.from(el.attributes).forEach((attr) => {
+        const n = attr.name.toLowerCase();
+        if (n.startsWith("on") || ((n === "href" || n === "src") && /^\s*javascript:/i.test(attr.value))) {
+          el.removeAttribute(attr.name);
+        }
+      });
+    });
+  };
+  strip(template.content);
+  return template.innerHTML;
+}
+
+// Старые лекции хранили обычный текст с переносами строк — превращаем в HTML для показа/редактирования
+function bodyToHtml(body) {
+  if (!body) return "";
+  if (/<[a-z][\s\S]*>/i.test(body)) return body;
+  const div = document.createElement("div");
+  div.textContent = body;
+  return div.innerHTML.replace(/\n/g, "<br>");
+}
+
+function insertNodeAtCursor(editor, node) {
+  editor.focus();
+  const sel = window.getSelection();
+  let range;
+  if (sel.rangeCount > 0 && editor.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+    range = sel.getRangeAt(0);
+  } else {
+    range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false);
+  }
+  range.deleteContents();
+  range.insertNode(node);
+  range.setStartAfter(node);
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+// Сжимает изображение и отдаёт data URL — картинка хранится прямо внутри документа
+// группы в Firestore (без Storage), поэтому держим файл маленьким: это ограничивает
+// общее число картинок на группу (~5–10), зато не требует платного тарифа Firebase.
+function resizeImageFile(file, maxDim = 900, quality = 0.65) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = () => reject(new Error("image-decode-failed"));
+      img.src = reader.result;
+    };
+    reader.onerror = () => reject(new Error("file-read-failed"));
+    reader.readAsDataURL(file);
+  });
+}
+
+boldBtn.addEventListener("click", () => {
+  lectureBodyEditor.focus();
+  document.execCommand("bold");
+});
+
+italicBtn.addEventListener("click", () => {
+  lectureBodyEditor.focus();
+  document.execCommand("italic");
+});
+
+insertImageBtn.addEventListener("click", () => {
+  imageFileInput.click();
+});
+
+imageFileInput.addEventListener("change", async () => {
+  const file = imageFileInput.files[0];
+  imageFileInput.value = "";
+  if (!file) return;
+
+  insertImageBtn.disabled = true;
+  insertImageBtn.textContent = "⏳";
+  try {
+    const dataUrl = await resizeImageFile(file);
+    const img = document.createElement("img");
+    img.src = dataUrl;
+    insertNodeAtCursor(lectureBodyEditor, img);
+  } catch (e) {
+    reportError(e);
+  } finally {
+    insertImageBtn.disabled = false;
+    insertImageBtn.textContent = "🖼️";
+  }
+});
 
 // ---------- Группы ----------
 
@@ -445,7 +564,7 @@ async function removeResource(idx) {
 addLectureBtn.addEventListener("click", () => {
   editingLectureId = null;
   lectureTitleInput.value = "";
-  lectureBodyInput.value = "";
+  lectureBodyEditor.innerHTML = "";
   lectureVideoInput.value = "";
   lectureFileInput.value = "";
   lectureEditorModal.hidden = false;
@@ -454,7 +573,7 @@ addLectureBtn.addEventListener("click", () => {
 function openEditLecture(l) {
   editingLectureId = l.id;
   lectureTitleInput.value = l.title;
-  lectureBodyInput.value = l.body || "";
+  lectureBodyEditor.innerHTML = bodyToHtml(l.body);
   lectureVideoInput.value = l.videoUrl || "";
   lectureFileInput.value = l.fileUrl || "";
   lectureEditorModal.hidden = false;
@@ -463,7 +582,7 @@ function openEditLecture(l) {
 lectureEditorForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const title = lectureTitleInput.value.trim();
-  const body = lectureBodyInput.value.trim();
+  const body = sanitizeHtml(lectureBodyEditor.innerHTML.trim());
   const videoUrl = lectureVideoInput.value.trim();
   const fileUrl = lectureFileInput.value.trim();
   if (!title) return;
@@ -786,7 +905,7 @@ function renderSubTabContent(group) {
 function openViewLecture(lecture) {
   if (!lecture) return;
   viewLectureTitle.textContent = lecture.title;
-  viewLectureBody.textContent = lecture.body || "";
+  viewLectureBody.innerHTML = sanitizeHtml(bodyToHtml(lecture.body));
 
   viewLectureVideo.innerHTML = "";
   if (lecture.videoUrl) {

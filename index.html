@@ -8,7 +8,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%9A%3C/text%3E%3C/svg%3E">
 <!-- При каждом деплое с изменениями в style.css/script.js увеличивай ?v= у обоих —
      иначе Safari и другие браузеры могут долго держать старую закэшированную версию. -->
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 
@@ -159,7 +159,7 @@
 
   <!-- Управление содержимым группы -->
   <div id="manageContentModal" class="quiz-overlay" hidden>
-    <div class="quiz-modal-card">
+    <div class="quiz-modal-card wide-modal-card">
       <button id="closeManageContent" type="button" class="btn quiz-close" aria-label="Закрыть">✕</button>
       <h2 class="quiz-title">Содержимое группы</h2>
       <p id="manageContentName" class="quiz-desc"></p>
@@ -190,12 +190,20 @@
 
   <!-- Редактор лекции -->
   <div id="lectureEditorModal" class="quiz-overlay" hidden>
-    <div class="quiz-modal-card">
+    <div class="quiz-modal-card wide-modal-card">
       <button id="closeLectureEditor" type="button" class="btn quiz-close" aria-label="Закрыть">✕</button>
       <h2 class="quiz-title">Лекция</h2>
       <form id="lectureEditorForm" class="lecture-form">
         <input type="text" id="lectureTitleInput" placeholder="Название лекции" maxlength="100" required>
-        <textarea id="lectureBodyInput" placeholder="Текст лекции…" rows="8"></textarea>
+
+        <div class="editor-toolbar">
+          <button type="button" id="boldBtn" class="editor-tool-btn" title="Жирный"><b>Ж</b></button>
+          <button type="button" id="italicBtn" class="editor-tool-btn" title="Курсив"><i>К</i></button>
+          <button type="button" id="insertImageBtn" class="editor-tool-btn" title="Вставить изображение">🖼️</button>
+          <input type="file" id="imageFileInput" accept="image/*" hidden>
+        </div>
+        <div id="lectureBodyEditor" class="lecture-editor" contenteditable="true" data-placeholder="Пиши текст лекции здесь — в любом месте можно вставить изображение кнопкой выше…"></div>
+
         <input type="text" id="lectureVideoInput" placeholder="Ссылка на видео (YouTube и т.п.) — необязательно" maxlength="300">
         <input type="text" id="lectureFileInput" placeholder="Ссылка на файл/задание (Google Диск и т.п.) — необязательно" maxlength="500">
         <button type="submit" class="btn btn-primary">Сохранить лекцию</button>
@@ -205,7 +213,7 @@
 
   <!-- Редактор теста -->
   <div id="testEditorModal" class="quiz-overlay" hidden>
-    <div class="quiz-modal-card">
+    <div class="quiz-modal-card wide-modal-card">
       <button id="closeTestEditor" type="button" class="btn quiz-close" aria-label="Закрыть">✕</button>
       <h2 class="quiz-title">Тест</h2>
       <input type="text" id="testTitleInput" placeholder="Название теста" maxlength="100" class="test-title-input">
@@ -217,7 +225,7 @@
 
   <!-- Прохождение теста учеником -->
   <div id="takeTestModal" class="quiz-overlay" hidden>
-    <div class="quiz-modal-card">
+    <div class="quiz-modal-card wide-modal-card">
       <button id="closeTakeTest" type="button" class="btn quiz-close" aria-label="Закрыть">✕</button>
       <h2 id="takeTestTitle" class="quiz-title">Тест</h2>
       <form id="takeTestForm"></form>
@@ -227,7 +235,7 @@
 
   <!-- Просмотр лекции -->
   <div id="viewLectureModal" class="quiz-overlay" hidden>
-    <div class="quiz-modal-card">
+    <div class="quiz-modal-card wide-modal-card">
       <button id="closeViewLecture" type="button" class="btn quiz-close" aria-label="Закрыть">✕</button>
       <h2 id="viewLectureTitle" class="quiz-title"></h2>
       <div id="viewLectureBody" class="lecture-body"></div>
@@ -238,6 +246,6 @@
 
 </div>
 
-<script type="module" src="script.js?v=4"></script>
+<script type="module" src="script.js?v=5"></script>
 </body>
 </html>
