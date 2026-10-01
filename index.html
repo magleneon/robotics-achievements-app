@@ -8,7 +8,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%9A%3C/text%3E%3C/svg%3E">
 <!-- При каждом деплое с изменениями в style.css/script.js увеличивай ?v= у обоих —
      иначе Safari и другие браузеры могут долго держать старую закэшированную версию. -->
-<link rel="stylesheet" href="style.css?v=1">
+<link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
 
@@ -110,6 +110,7 @@
     <div class="add-student-card no-print">
       <div class="section-title">➕ Добавить ученика</div>
       <form id="addStudentForm" class="add-student-form" autocomplete="off">
+        <input type="text" id="newStudentFullName" placeholder="ФИО ученика" maxlength="80" required>
         <input type="text" id="newStudentUsername" placeholder="Логин ученика" maxlength="30" required>
         <input type="text" id="newStudentPassword" placeholder="Пароль" maxlength="30" required>
         <button type="button" id="generatePasswordBtn" class="btn btn-ghost" title="Сгенерировать пароль">🎲</button>
@@ -119,11 +120,20 @@
       <p id="addStudentMessage" class="login-error" hidden></p>
     </div>
 
+    <div class="add-group-card no-print">
+      <div class="section-title">📥 Скачать пароли</div>
+      <div class="add-group-form">
+        <select id="exportGroupSelect" class="group-select"></select>
+        <button type="button" id="exportPasswordsBtn" class="btn btn-primary">Скачать CSV</button>
+      </div>
+    </div>
+
     <div class="teacher-table-wrap">
       <table class="teacher-table">
         <thead>
           <tr>
-            <th>Ученик</th>
+            <th>ФИО</th>
+            <th>Логин</th>
             <th>Группы</th>
             <th>Была активность</th>
             <th class="no-print">Заметка</th>
@@ -148,8 +158,19 @@
     </div>
   </div>
 
+  <!-- Управление занятиями группы -->
+  <div id="manageTopicsModal" class="quiz-overlay" hidden>
+    <div class="quiz-modal-card">
+      <button id="closeManageTopics" type="button" class="btn quiz-close" aria-label="Закрыть">✕</button>
+      <h2 class="quiz-title">Занятия группы</h2>
+      <p id="manageTopicsName" class="quiz-desc"></p>
+      <div id="topicsList" class="groups-list"></div>
+      <button id="addTopicBtn" type="button" class="btn btn-primary" style="width:100%; margin-top:16px;">➕ Добавить занятие</button>
+    </div>
+  </div>
+
 </div>
 
-<script type="module" src="script.js?v=1"></script>
+<script type="module" src="script.js?v=2"></script>
 </body>
 </html>

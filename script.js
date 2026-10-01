@@ -60,17 +60,27 @@ const addGroupMessage = document.getElementById("addGroupMessage");
 const groupsListEl = document.getElementById("groupsList");
 
 const addStudentForm = document.getElementById("addStudentForm");
+const newStudentFullName = document.getElementById("newStudentFullName");
 const newStudentUsername = document.getElementById("newStudentUsername");
 const newStudentPassword = document.getElementById("newStudentPassword");
 const generatePasswordBtn = document.getElementById("generatePasswordBtn");
 const newStudentGroups = document.getElementById("newStudentGroups");
 const addStudentMessage = document.getElementById("addStudentMessage");
 
+const exportGroupSelect = document.getElementById("exportGroupSelect");
+const exportPasswordsBtn = document.getElementById("exportPasswordsBtn");
+
 const editGroupsModal = document.getElementById("editGroupsModal");
 const closeEditGroups = document.getElementById("closeEditGroups");
 const editGroupsName = document.getElementById("editGroupsName");
 const editGroupsCheckboxes = document.getElementById("editGroupsCheckboxes");
 const saveEditGroups = document.getElementById("saveEditGroups");
+
+const manageTopicsModal = document.getElementById("manageTopicsModal");
+const closeManageTopics = document.getElementById("closeManageTopics");
+const manageTopicsName = document.getElementById("manageTopicsName");
+const topicsListEl = document.getElementById("topicsList");
+const addTopicBtn = document.getElementById("addTopicBtn");
 
 let currentUser = null;
 let currentUserData = null; // кэш документа текущего ученика из Firestore
@@ -197,17 +207,27 @@ async function renderGroupsManagement() {
       const pill = document.createElement("span");
       pill.className = "group-pill";
       pill.innerHTML = `${g.name} `;
+
+      const topicsBtn = document.createElement("button");
+      topicsBtn.type = "button";
+      topicsBtn.textContent = "⚙️";
+      topicsBtn.setAttribute("aria-label", `Занятия группы ${g.name}`);
+      topicsBtn.addEventListener("click", () => openManageTopics(g.id));
+      pill.appendChild(topicsBtn);
+
       const delBtn = document.createElement("button");
       delBtn.type = "button";
       delBtn.textContent = "✕";
       delBtn.setAttribute("aria-label", `Удалить группу ${g.name}`);
       delBtn.addEventListener("click", () => deleteGroup(g.id, g.name));
       pill.appendChild(delBtn);
+
       groupsListEl.appendChild(pill);
     });
   }
 
   renderStudentGroupCheckboxes();
+  populateExportGroupSelect();
 }
 
 function renderStudentGroupCheckboxes() {
@@ -223,6 +243,86 @@ function renderStudentGroupCheckboxes() {
     newStudentGroups.appendChild(label);
   });
 }
+
+function populateExportGroupSelect() {
+  exportGroupSelect.innerHTML = '<option value="__all__">Все ученики</option>';
+  allGroupsCache.forEach((g) => {
+    const opt = document.createElement("option");
+    opt.value = g.id;
+    opt.textContent = g.name;
+    exportGroupSelect.appendChild(opt);
+  });
+}
+
+// ---------- Занятия внутри группы ----------
+
+let managingGroupId = null;
+
+function openManageTopics(groupId) {
+  managingGroupId = groupId;
+  const group = allGroupsCache.find((g) => g.id === groupId);
+  if (!group) return;
+  manageTopicsName.textContent = group.name;
+  renderTopicsList(group.topics);
+  manageTopicsModal.hidden = false;
+}
+
+function renderTopicsList(topics) {
+  topicsListEl.innerHTML = "";
+  if (!topics || topics.length === 0) {
+    topicsListEl.innerHTML = '<p class="group-checkboxes-empty">Занятий пока нет.</p>';
+    return;
+  }
+  topics.forEach((topic, index) => {
+    const pill = document.createElement("span");
+    pill.className = "group-pill";
+    pill.innerHTML = `${topic} `;
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.textContent = "✕";
+    delBtn.setAttribute("aria-label", `Удалить ${topic}`);
+    delBtn.addEventListener("click", () => removeTopic(index));
+    pill.appendChild(delBtn);
+    topicsListEl.appendChild(pill);
+  });
+}
+
+async function addTopic() {
+  const group = allGroupsCache.find((g) => g.id === managingGroupId);
+  if (!group) return;
+  addTopicBtn.disabled = true;
+  const topics = [...(group.topics || []), `Занятие ${(group.topics || []).length + 1}`];
+  try {
+    await setDoc(groupRef(managingGroupId), { topics }, { merge: true });
+    group.topics = topics;
+    renderTopicsList(topics);
+  } catch (e) {
+    console.error(e);
+    showToast(NETWORK_ERROR_TOAST);
+  } finally {
+    addTopicBtn.disabled = false;
+  }
+}
+
+async function removeTopic(index) {
+  const group = allGroupsCache.find((g) => g.id === managingGroupId);
+  if (!group) return;
+  const topics = (group.topics || []).filter((_, i) => i !== index);
+  try {
+    await setDoc(groupRef(managingGroupId), { topics }, { merge: true });
+    group.topics = topics;
+    renderTopicsList(topics);
+  } catch (e) {
+    console.error(e);
+    showToast(NETWORK_ERROR_TOAST);
+  }
+}
+
+addTopicBtn.addEventListener("click", addTopic);
+
+closeManageTopics.addEventListener("click", () => {
+  manageTopicsModal.hidden = true;
+});
 
 addGroupForm.addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -396,6 +496,8 @@ async function getAllStudentsData() {
       const data = d.data();
       return {
         name: data.name || d.id,
+        fullName: data.fullName || "",
+        password: data.password || "",
         groups: data.groups || [],
         lastActive: data.lastActive,
         note: data.note || "",
@@ -411,7 +513,7 @@ function groupNameById(id) {
 
 async function renderTeacherPanel() {
   teacherStats.innerHTML = "";
-  teacherTableBody.innerHTML = '<tr><td colspan="5" class="teacher-empty">Загрузка данных…</td></tr>';
+  teacherTableBody.innerHTML = '<tr><td colspan="6" class="teacher-empty">Загрузка данных…</td></tr>';
 
   let students;
   let groups;
@@ -420,7 +522,7 @@ async function renderTeacherPanel() {
   } catch (e) {
     console.error(e);
     teacherTableBody.innerHTML =
-      '<tr><td colspan="5" class="teacher-empty">Не удалось загрузить данные — проверь интернет-соединение.</td></tr>';
+      '<tr><td colspan="6" class="teacher-empty">Не удалось загрузить данные — проверь интернет-соединение.</td></tr>';
     return;
   }
   allGroupsCache = groups;
@@ -434,13 +536,17 @@ async function renderTeacherPanel() {
 
   if (students.length === 0) {
     teacherTableBody.innerHTML =
-      '<tr><td colspan="5" class="teacher-empty">Пока нет ни одного ученика — добавь первого выше.</td></tr>';
+      '<tr><td colspan="6" class="teacher-empty">Пока нет ни одного ученика — добавь первого выше.</td></tr>';
     return;
   }
 
   students.forEach((u) => {
     const isStale = u.lastActive && Date.now() - u.lastActive > 14 * 86400000;
     const tr = document.createElement("tr");
+
+    const fullNameTd = document.createElement("td");
+    fullNameTd.textContent = u.fullName || "—";
+    tr.appendChild(fullNameTd);
 
     const nameTd = document.createElement("td");
     nameTd.textContent = u.name;
@@ -523,10 +629,12 @@ async function deleteStudent(name) {
 async function resetStudentPassword(name) {
   const newPassword = prompt(`Новый пароль для «${name}»:`);
   if (!newPassword || !newPassword.trim()) return;
+  const clean = newPassword.trim();
   try {
-    const passwordHash = await sha256Hex(newPassword.trim());
-    await setDoc(studentRef(name), { passwordHash }, { merge: true });
-    alert(`Готово. Новый пароль для «${name}»: ${newPassword.trim()}`);
+    const passwordHash = await sha256Hex(clean);
+    await setDoc(studentRef(name), { passwordHash, password: clean }, { merge: true });
+    alert(`Готово. Новый пароль для «${name}»: ${clean}`);
+    renderTeacherPanel();
   } catch (e) {
     console.error(e);
     showToast(NETWORK_ERROR_TOAST);
@@ -573,10 +681,11 @@ saveEditGroups.addEventListener("click", async () => {
 
 addStudentForm.addEventListener("submit", async (e) => {
   e.preventDefault();
+  const fullName = newStudentFullName.value.trim();
   const username = newStudentUsername.value.trim();
   const password = newStudentPassword.value.trim();
   addStudentMessage.hidden = true;
-  if (!username || !password) return;
+  if (!fullName || !username || !password) return;
 
   const selectedGroups = Array.from(newStudentGroups.querySelectorAll('input[type="checkbox"]:checked'))
     .map((el) => el.value);
@@ -594,7 +703,9 @@ addStudentForm.addEventListener("submit", async (e) => {
     const passwordHash = await sha256Hex(password);
     await setDoc(ref, {
       name: username,
+      fullName,
       passwordHash,
+      password,
       groups: selectedGroups,
       note: "",
       lastActive: null,
@@ -603,6 +714,7 @@ addStudentForm.addEventListener("submit", async (e) => {
     addStudentMessage.className = "add-student-success";
     addStudentMessage.textContent = `Готово! Логин: ${username} · Пароль: ${password}`;
     addStudentMessage.hidden = false;
+    newStudentFullName.value = "";
     newStudentUsername.value = "";
     newStudentPassword.value = "";
     renderStudentGroupCheckboxes();
@@ -620,6 +732,50 @@ generatePasswordBtn.addEventListener("click", () => {
   const word = words[Math.floor(Math.random() * words.length)];
   const num = Math.floor(100 + Math.random() * 900);
   newStudentPassword.value = word + num;
+});
+
+function csvEscape(value) {
+  const str = String(value ?? "");
+  if (/[;"\n]/.test(str)) {
+    return '"' + str.replace(/"/g, '""') + '"';
+  }
+  return str;
+}
+
+exportPasswordsBtn.addEventListener("click", async () => {
+  const selected = exportGroupSelect.value;
+  let students;
+  try {
+    students = await getAllStudentsData();
+  } catch (e) {
+    console.error(e);
+    showToast(NETWORK_ERROR_TOAST);
+    return;
+  }
+
+  const filtered = selected === "__all__" ? students : students.filter((u) => u.groups.includes(selected));
+
+  if (filtered.length === 0) {
+    showToast("В этой группе пока нет учеников.");
+    return;
+  }
+
+  const rows = [["ФИО", "Логин", "Пароль"]];
+  filtered.forEach((u) => {
+    rows.push([u.fullName || "", u.name, u.password || "(сбросьте пароль, чтобы узнать)"]);
+  });
+
+  const csv = "﻿" + rows.map((r) => r.map(csvEscape).join(";")).join("\r\n");
+  const groupLabel = selected === "__all__" ? "все" : groupNameById(selected);
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `Пароли — ${groupLabel}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 });
 
 teacherPanelBtn.addEventListener("click", () => {
